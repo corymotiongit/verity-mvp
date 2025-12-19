@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verity MVP</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('verity_theme_v1');
+          if (stored === 'light') document.documentElement.classList.remove('dark');
+          if (stored === 'dark') document.documentElement.classList.add('dark');
+          if (stored === 'system') {
+            var prefersDark = false;
+            try {
+              prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            } catch (e) {}
+            if (prefersDark) document.documentElement.classList.add('dark');
+            else document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        /* Light theme (RGB triplets) */
+        --bg-base: 250 250 252;
+        --bg-surface: 255 255 255;
+        --bg-elevated: 245 246 248;
+        --bg-hover: 240 241 244;
+        --bg-active: 232 233 237;
+
+        --border-rgb: 0 0 0;
+
+        --text-primary: 17 24 39;
+        --text-secondary: 55 65 81;
+        --text-muted: 107 114 128;
+
+        --accent-success: 16 185 129;
+        --accent-warning: 245 158 11;
+        --accent-danger: 239 68 68;
+        --accent-info: 103 232 249;
+      }
+
+      .dark {
+        /* Dark theme (existing palette) */
+        --bg-base: 15 15 18;
+        --bg-surface: 24 24 28;
+        --bg-elevated: 31 31 36;
+        --bg-hover: 39 39 44;
+        --bg-active: 47 47 53;
+
+        --border-rgb: 255 255 255;
+
+        --text-primary: 250 250 250;
+        --text-secondary: 161 161 170;
+        --text-muted: 113 113 122;
+
+        --accent-success: 16 185 129;
+        --accent-warning: 245 158 11;
+        --accent-danger: 239 68 68;
+        --accent-info: 103 232 249;
+      }
+
+      /* Custom Scrollbar for a premium feel */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgb(var(--bg-base));
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgb(var(--bg-active));
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgb(var(--text-muted));
+      }
+    </style>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+            colors: {
+              bg: {
+                base: 'rgb(var(--bg-base) / <alpha-value>)',
+                surface: 'rgb(var(--bg-surface) / <alpha-value>)',
+                elevated: 'rgb(var(--bg-elevated) / <alpha-value>)',
+                hover: 'rgb(var(--bg-hover) / <alpha-value>)',
+                active: 'rgb(var(--bg-active) / <alpha-value>)',
+              },
+              border: {
+                subtle: 'rgb(var(--border-rgb) / 0.06)',
+                default: 'rgb(var(--border-rgb) / 0.10)',
+                strong: 'rgb(var(--border-rgb) / 0.16)',
+              },
+              text: {
+                primary: 'rgb(var(--text-primary) / <alpha-value>)',
+                secondary: 'rgb(var(--text-secondary) / <alpha-value>)',
+                muted: 'rgb(var(--text-muted) / <alpha-value>)',
+              },
+              accent: {
+                success: 'rgb(var(--accent-success) / <alpha-value>)',
+                warning: 'rgb(var(--accent-warning) / <alpha-value>)',
+                danger: 'rgb(var(--accent-danger) / <alpha-value>)',
+                info: 'rgb(var(--accent-info) / <alpha-value>)',
+              }
+            },
+            boxShadow: {
+              'glow-success': '0 0 12px rgba(16, 185, 129, 0.25)',
+              'glow-hover': '0 0 20px rgba(16, 185, 129, 0.15)',
+            }
+          }
+        }
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.10.1"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-bg-base text-text-primary antialiased h-screen overflow-hidden selection:bg-accent-success selection:text-white">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+﻿uploads/
+.env
+.venv/
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+.env.local
+.env.*
+node_modules/
+dist/

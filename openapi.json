@@ -1,0 +1,1660 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Verity API",
+    "description": "MVP monolítico modular para gestión documental con IA, aprobaciones humanas, y agente conversacional Veri.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Verity Team"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://verity-api-{env}.a.run.app",
+      "description": "Google Cloud Run",
+      "variables": {
+        "env": {
+          "default": "dev",
+          "enum": ["dev", "staging", "prod"]
+        }
+      }
+    },
+    {
+      "url": "http://localhost:8000",
+      "description": "Local Development"
+    }
+  ],
+  "tags": [
+    {"name": "documents", "description": "Gestión de documentos con Vertex AI Gemini File Search"},
+    {"name": "approvals", "description": "Aprobación humana por campo (pending/approved/rejected)"},
+    {"name": "agent", "description": "Agente conversacional Veri (DB + documentos)"},
+    {"name": "charts", "description": "Generación de chart_spec bajo demanda"},
+    {"name": "reports", "description": "Reportes generados"},
+    {"name": "forecast", "description": "Predicciones y proyecciones"},
+    {"name": "logs", "description": "Logs de consola (solo lectura, admin only)"},
+    {"name": "audit", "description": "Timeline de auditoría inmutable"},
+    {"name": "health", "description": "Health checks"}
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["health"],
+        "summary": "Health check",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "Service healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/documents/ingest": {
+      "post": {
+        "tags": ["documents"],
+        "summary": "Ingest document (upload + parse + index)",
+        "description": "Sube un documento, lo parsea y lo indexa en Gemini File API. Retorna metadata del archivo procesado.",
+        "operationId": "ingestDocument",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_DOCUMENTS",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Archivo a procesar (PDF, DOCX, TXT, etc.)"
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "description": "Nombre visible del documento"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "Metadata adicional"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Documento ingestado exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "413": {"$ref": "#/components/responses/PayloadTooLarge"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/documents/{document_id}": {
+      "get": {
+        "tags": ["documents"],
+        "summary": "Get document metadata",
+        "operationId": "getDocument",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_DOCUMENTS",
+        "parameters": [
+          {"$ref": "#/components/parameters/DocumentId"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Metadata del documento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      },
+      "delete": {
+        "tags": ["documents"],
+        "summary": "Delete document",
+        "operationId": "deleteDocument",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_DOCUMENTS",
+        "x-roles": ["admin"],
+        "parameters": [
+          {"$ref": "#/components/parameters/DocumentId"}
+        ],
+        "responses": {
+          "204": {"description": "Documento eliminado"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/documents/search": {
+      "post": {
+        "tags": ["documents"],
+        "summary": "Search documents with Gemini",
+        "description": "Búsqueda semántica usando Vertex AI Gemini File Search. No usa embeddings ni vector DB.",
+        "operationId": "searchDocuments",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_DOCUMENTS",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultados de búsqueda",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentSearchResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/documents": {
+      "get": {
+        "tags": ["documents"],
+        "summary": "List documents",
+        "operationId": "listDocuments",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_DOCUMENTS",
+        "parameters": [
+          {"$ref": "#/components/parameters/PageSize"},
+          {"$ref": "#/components/parameters/PageToken"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de documentos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentListResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/approvals": {
+      "post": {
+        "tags": ["approvals"],
+        "summary": "Create approval request",
+        "description": "Crea una solicitud de aprobación con diff por campo.",
+        "operationId": "createApproval",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_APPROVALS",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Solicitud creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      },
+      "get": {
+        "tags": ["approvals"],
+        "summary": "List approvals",
+        "operationId": "listApprovals",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_APPROVALS",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ApprovalStatus"
+            }
+          },
+          {"$ref": "#/components/parameters/PageSize"},
+          {"$ref": "#/components/parameters/PageToken"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de solicitudes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalListResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/approvals/pending": {
+      "get": {
+        "tags": ["approvals"],
+        "summary": "List pending approvals",
+        "operationId": "listPendingApprovals",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_APPROVALS",
+        "parameters": [
+          {"$ref": "#/components/parameters/PageSize"},
+          {"$ref": "#/components/parameters/PageToken"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de pendientes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalListResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/approvals/{approval_id}": {
+      "get": {
+        "tags": ["approvals"],
+        "summary": "Get approval with diff",
+        "operationId": "getApproval",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_APPROVALS",
+        "parameters": [
+          {"$ref": "#/components/parameters/ApprovalId"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Detalle con diff por campo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/approvals/{approval_id}/fields/{field_name}": {
+      "patch": {
+        "tags": ["approvals"],
+        "summary": "Approve or reject a field",
+        "operationId": "updateFieldApproval",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_APPROVALS",
+        "x-roles": ["admin", "approver"],
+        "parameters": [
+          {"$ref": "#/components/parameters/ApprovalId"},
+          {
+            "name": "field_name",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FieldApprovalUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Campo actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FieldApproval"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/agent/chat": {
+      "post": {
+        "tags": ["agent"],
+        "summary": "Chat with Veri agent",
+        "description": "Envía mensaje al agente Veri. Combina contexto de DB + documentos. NUNCA escribe directo a DB, solo propone cambios. Genera chart_spec SOLO si el usuario lo pide explícitamente.",
+        "operationId": "chatWithAgent",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_AGENT",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Respuesta del agente con sources y request_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentChatResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/agent/conversations/{conversation_id}": {
+      "get": {
+        "tags": ["agent"],
+        "summary": "Get conversation history",
+        "operationId": "getConversation",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_AGENT",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Historial de conversación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/agent/conversations": {
+      "get": {
+        "tags": ["agent"],
+        "summary": "List user conversations",
+        "operationId": "listConversations",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_AGENT",
+        "parameters": [
+          {"$ref": "#/components/parameters/PageSize"},
+          {"$ref": "#/components/parameters/PageToken"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de conversaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationListResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/charts/generate": {
+      "post": {
+        "tags": ["charts"],
+        "summary": "Generate chart_spec (not persisted by default)",
+        "description": "Genera un chart_spec desde datos. NO persiste por defecto, solo si save=true.",
+        "operationId": "generateChart",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_CHARTS",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChartGenerateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chart spec generado (no guardado)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChartGenerateResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Chart spec guardado (save=true)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChartResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/charts/{chart_id}": {
+      "get": {
+        "tags": ["charts"],
+        "summary": "Get saved chart",
+        "operationId": "getChart",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_CHARTS",
+        "parameters": [
+          {
+            "name": "chart_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Chart guardado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChartResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      },
+      "delete": {
+        "tags": ["charts"],
+        "summary": "Delete saved chart",
+        "operationId": "deleteChart",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_CHARTS",
+        "parameters": [
+          {
+            "name": "chart_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "204": {"description": "Chart eliminado"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/charts": {
+      "get": {
+        "tags": ["charts"],
+        "summary": "List saved charts",
+        "operationId": "listCharts",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_CHARTS",
+        "parameters": [
+          {"$ref": "#/components/parameters/PageSize"},
+          {"$ref": "#/components/parameters/PageToken"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de charts guardados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChartListResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/reports": {
+      "post": {
+        "tags": ["reports"],
+        "summary": "Create report",
+        "operationId": "createReport",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_REPORTS",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reporte creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      },
+      "get": {
+        "tags": ["reports"],
+        "summary": "List reports",
+        "operationId": "listReports",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_REPORTS",
+        "parameters": [
+          {"$ref": "#/components/parameters/PageSize"},
+          {"$ref": "#/components/parameters/PageToken"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de reportes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportListResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/reports/{report_id}": {
+      "get": {
+        "tags": ["reports"],
+        "summary": "Get report",
+        "operationId": "getReport",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_REPORTS",
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detalle del reporte",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      },
+      "delete": {
+        "tags": ["reports"],
+        "summary": "Delete report",
+        "operationId": "deleteReport",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_REPORTS",
+        "x-roles": ["admin"],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "204": {"description": "Reporte eliminado"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/forecast": {
+      "post": {
+        "tags": ["forecast"],
+        "summary": "Generate forecast",
+        "operationId": "generateForecast",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_FORECAST",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForecastRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Predicción generada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForecastResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/forecast/{forecast_id}": {
+      "get": {
+        "tags": ["forecast"],
+        "summary": "Get forecast result",
+        "operationId": "getForecast",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_FORECAST",
+        "parameters": [
+          {
+            "name": "forecast_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado de predicción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForecastResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/logs": {
+      "get": {
+        "tags": ["logs"],
+        "summary": "List logs (admin only, read-only)",
+        "description": "Lista logs de la aplicación. SOLO LECTURA, sin filtros arbitrarios para evitar leaks. Requiere rol admin.",
+        "operationId": "listLogs",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_LOGS",
+        "x-roles": ["admin"],
+        "parameters": [
+          {
+            "name": "level",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+            },
+            "description": "Filtro fijo por nivel (único filtro permitido)"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Logs desde esta fecha"
+          },
+          {"$ref": "#/components/parameters/PageSize"},
+          {"$ref": "#/components/parameters/PageToken"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogListResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/logs/stream": {
+      "get": {
+        "tags": ["logs"],
+        "summary": "Stream logs via SSE (admin only, read-only)",
+        "description": "Streaming de logs en tiempo real estilo terminal. SOLO LECTURA. Requiere rol admin.",
+        "operationId": "streamLogs",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_LOGS",
+        "x-roles": ["admin"],
+        "parameters": [
+          {
+            "name": "level",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+            },
+            "description": "Filtro fijo por nivel mínimo"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stream de logs (SSE)",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-Sent Events con logs formateados"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/audit/timeline": {
+      "get": {
+        "tags": ["audit"],
+        "summary": "Get audit timeline",
+        "description": "Timeline inmutable de todos los eventos de auditoría.",
+        "operationId": "getAuditTimeline",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_AUDIT",
+        "x-roles": ["admin", "auditor"],
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["create", "update", "delete", "approve", "reject", "login", "logout"]
+            }
+          },
+          {
+            "name": "actor_id",
+            "in": "query",
+            "schema": {"type": "string", "format": "uuid"}
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {"type": "string", "format": "date-time"}
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "schema": {"type": "string", "format": "date-time"}
+          },
+          {"$ref": "#/components/parameters/PageSize"},
+          {"$ref": "#/components/parameters/PageToken"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Timeline de eventos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditTimelineResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    },
+    "/audit/entity/{entity_type}/{entity_id}": {
+      "get": {
+        "tags": ["audit"],
+        "summary": "Get entity history",
+        "description": "Historia completa de una entidad específica.",
+        "operationId": "getEntityHistory",
+        "security": [{"bearerAuth": []}],
+        "x-feature-flag": "FEATURE_AUDIT",
+        "x-roles": ["admin", "auditor"],
+        "parameters": [
+          {
+            "name": "entity_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["document", "approval", "report", "chart", "forecast", "conversation"]
+            }
+          },
+          {
+            "name": "entity_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Historia de la entidad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntityHistoryResponse"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "503": {"$ref": "#/components/responses/FeatureDisabled"}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token from Supabase Auth. Include in header: Authorization: Bearer <token>"
+      }
+    },
+    "parameters": {
+      "DocumentId": {
+        "name": "document_id",
+        "in": "path",
+        "required": true,
+        "schema": {"type": "string", "format": "uuid"}
+      },
+      "ApprovalId": {
+        "name": "approval_id",
+        "in": "path",
+        "required": true,
+        "schema": {"type": "string", "format": "uuid"}
+      },
+      "PageSize": {
+        "name": "page_size",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      },
+      "PageToken": {
+        "name": "page_token",
+        "in": "query",
+        "schema": {"type": "string"},
+        "description": "Token for next page"
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Bad Request",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Unauthorized - Invalid or missing JWT",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Forbidden - Insufficient permissions",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Conflict - State transition not allowed",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Payload Too Large",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+          }
+        }
+      },
+      "FeatureDisabled": {
+        "description": "Feature Disabled - Module is turned off via feature flag",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+          }
+        }
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "required": ["status", "version", "features"],
+        "properties": {
+          "status": {"type": "string", "enum": ["healthy", "degraded"]},
+          "version": {"type": "string"},
+          "features": {
+            "type": "object",
+            "description": "Feature flags status",
+            "additionalProperties": {"type": "boolean"}
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Machine-readable error code",
+                "examples": ["UNAUTHORIZED", "NOT_FOUND", "FEATURE_DISABLED", "VALIDATION_ERROR"]
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable error message"
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Additional error context"
+              },
+              "request_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Request ID for debugging"
+              }
+            }
+          }
+        }
+      },
+      "PaginationMeta": {
+        "type": "object",
+        "properties": {
+          "total_count": {"type": "integer"},
+          "page_size": {"type": "integer"},
+          "next_page_token": {"type": "string", "nullable": true},
+          "has_more": {"type": "boolean"}
+        }
+      },
+      "DocumentResponse": {
+        "type": "object",
+        "required": ["id", "display_name", "gemini_uri", "mime_type", "size_bytes", "status", "created_at", "created_by"],
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "display_name": {"type": "string"},
+          "gemini_uri": {"type": "string", "description": "Gemini File API URI"},
+          "mime_type": {"type": "string"},
+          "size_bytes": {"type": "integer"},
+          "status": {
+            "type": "string",
+            "enum": ["processing", "ready", "failed"]
+          },
+          "metadata": {"type": "object", "additionalProperties": true},
+          "created_at": {"type": "string", "format": "date-time"},
+          "created_by": {"type": "string", "format": "uuid"}
+        }
+      },
+      "DocumentListResponse": {
+        "type": "object",
+        "required": ["items", "meta"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/DocumentResponse"}
+          },
+          "meta": {"$ref": "#/components/schemas/PaginationMeta"}
+        }
+      },
+      "DocumentSearchRequest": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "document_ids": {
+            "type": "array",
+            "items": {"type": "string", "format": "uuid"},
+            "description": "Limit search to specific documents"
+          },
+          "max_results": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 5
+          }
+        }
+      },
+      "DocumentSearchResponse": {
+        "type": "object",
+        "required": ["results", "request_id"],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["document_id", "snippet", "relevance_score"],
+              "properties": {
+                "document_id": {"type": "string", "format": "uuid"},
+                "document_name": {"type": "string"},
+                "snippet": {"type": "string"},
+                "relevance_score": {"type": "number", "minimum": 0, "maximum": 1}
+              }
+            }
+          },
+          "request_id": {"type": "string", "format": "uuid"}
+        }
+      },
+      "ApprovalStatus": {
+        "type": "string",
+        "enum": ["pending", "approved", "rejected", "partial"]
+      },
+      "FieldApproval": {
+        "type": "object",
+        "required": ["field_name", "original_value", "proposed_value", "status"],
+        "properties": {
+          "field_name": {"type": "string"},
+          "original_value": {},
+          "proposed_value": {},
+          "status": {"$ref": "#/components/schemas/ApprovalStatus"},
+          "approved_by": {"type": "string", "format": "uuid", "nullable": true},
+          "approved_at": {"type": "string", "format": "date-time", "nullable": true},
+          "comment": {"type": "string", "nullable": true}
+        }
+      },
+      "FieldApprovalUpdate": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["approved", "rejected"]
+          },
+          "comment": {"type": "string", "maxLength": 500}
+        }
+      },
+      "ApprovalCreateRequest": {
+        "type": "object",
+        "required": ["entity_type", "entity_id", "fields"],
+        "properties": {
+          "entity_type": {"type": "string"},
+          "entity_id": {"type": "string", "format": "uuid"},
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["field_name", "original_value", "proposed_value"],
+              "properties": {
+                "field_name": {"type": "string"},
+                "original_value": {},
+                "proposed_value": {}
+              }
+            }
+          },
+          "reason": {"type": "string"},
+          "priority": {
+            "type": "string",
+            "enum": ["low", "normal", "high", "urgent"],
+            "default": "normal"
+          }
+        }
+      },
+      "ApprovalResponse": {
+        "type": "object",
+        "required": ["id", "entity_type", "entity_id", "status", "fields", "created_at", "created_by"],
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "entity_type": {"type": "string"},
+          "entity_id": {"type": "string", "format": "uuid"},
+          "status": {"$ref": "#/components/schemas/ApprovalStatus"},
+          "fields": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/FieldApproval"}
+          },
+          "reason": {"type": "string", "nullable": true},
+          "priority": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "created_by": {"type": "string", "format": "uuid"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "ApprovalDetailResponse": {
+        "allOf": [
+          {"$ref": "#/components/schemas/ApprovalResponse"},
+          {
+            "type": "object",
+            "properties": {
+              "diff": {
+                "type": "object",
+                "description": "Unified diff representation per field",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "before": {},
+                    "after": {},
+                    "diff_html": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ApprovalListResponse": {
+        "type": "object",
+        "required": ["items", "meta"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/ApprovalResponse"}
+          },
+          "meta": {"$ref": "#/components/schemas/PaginationMeta"}
+        }
+      },
+      "AgentChatRequest": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": {"type": "string", "minLength": 1, "maxLength": 4000},
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Continue existing conversation, or omit to start new"
+          },
+          "context": {
+            "type": "object",
+            "description": "Additional context for the agent",
+            "properties": {
+              "document_ids": {
+                "type": "array",
+                "items": {"type": "string", "format": "uuid"}
+              },
+              "include_db_context": {"type": "boolean", "default": true}
+            }
+          }
+        }
+      },
+      "AgentChatResponse": {
+        "type": "object",
+        "required": ["request_id", "conversation_id", "message", "sources"],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique request identifier for tracing"
+          },
+          "conversation_id": {"type": "string", "format": "uuid"},
+          "message": {
+            "type": "object",
+            "required": ["role", "content"],
+            "properties": {
+              "role": {"type": "string", "const": "assistant"},
+              "content": {"type": "string"}
+            }
+          },
+          "sources": {
+            "type": "array",
+            "description": "Always included - citations from documents and DB",
+            "items": {
+              "type": "object",
+              "required": ["type", "id"],
+              "properties": {
+                "type": {"type": "string", "enum": ["document", "database", "web"]},
+                "id": {"type": "string"},
+                "title": {"type": "string"},
+                "snippet": {"type": "string"},
+                "relevance": {"type": "number"}
+              }
+            }
+          },
+          "proposed_changes": {
+            "type": "array",
+            "description": "Agent NEVER writes to DB directly, only proposes changes",
+            "items": {
+              "type": "object",
+              "required": ["entity_type", "entity_id", "action", "changes"],
+              "properties": {
+                "entity_type": {"type": "string"},
+                "entity_id": {"type": "string", "format": "uuid", "nullable": true},
+                "action": {"type": "string", "enum": ["create", "update", "delete"]},
+                "changes": {"type": "object", "additionalProperties": true},
+                "requires_approval": {"type": "boolean", "default": true}
+              }
+            }
+          },
+          "chart_spec": {
+            "type": "object",
+            "description": "Only included when user EXPLICITLY requests a chart",
+            "nullable": true,
+            "properties": {
+              "type": {"type": "string", "enum": ["vega-lite", "chartjs"]},
+              "spec": {"type": "object", "additionalProperties": true}
+            }
+          }
+        }
+      },
+      "ConversationResponse": {
+        "type": "object",
+        "required": ["id", "messages", "created_at"],
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "title": {"type": "string", "nullable": true},
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["role", "content", "timestamp"],
+              "properties": {
+                "role": {"type": "string", "enum": ["user", "assistant"]},
+                "content": {"type": "string"},
+                "timestamp": {"type": "string", "format": "date-time"},
+                "request_id": {"type": "string", "format": "uuid"}
+              }
+            }
+          },
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "ConversationListResponse": {
+        "type": "object",
+        "required": ["items", "meta"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "title", "message_count", "created_at"],
+              "properties": {
+                "id": {"type": "string", "format": "uuid"},
+                "title": {"type": "string", "nullable": true},
+                "message_count": {"type": "integer"},
+                "created_at": {"type": "string", "format": "date-time"},
+                "updated_at": {"type": "string", "format": "date-time"}
+              }
+            }
+          },
+          "meta": {"$ref": "#/components/schemas/PaginationMeta"}
+        }
+      },
+      "ChartGenerateRequest": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {"type": "object", "additionalProperties": true}
+          },
+          "chart_type": {
+            "type": "string",
+            "enum": ["bar", "line", "pie", "scatter", "area", "auto"],
+            "default": "auto"
+          },
+          "title": {"type": "string"},
+          "format": {
+            "type": "string",
+            "enum": ["vega-lite", "chartjs"],
+            "default": "vega-lite"
+          },
+          "save": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, persist the chart_spec to database"
+          }
+        }
+      },
+      "ChartGenerateResponse": {
+        "type": "object",
+        "required": ["spec", "format"],
+        "properties": {
+          "spec": {"type": "object", "additionalProperties": true},
+          "format": {"type": "string", "enum": ["vega-lite", "chartjs"]},
+          "saved": {"type": "boolean", "default": false}
+        }
+      },
+      "ChartResponse": {
+        "type": "object",
+        "required": ["id", "spec", "format", "created_at", "created_by"],
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "title": {"type": "string", "nullable": true},
+          "spec": {"type": "object", "additionalProperties": true},
+          "format": {"type": "string", "enum": ["vega-lite", "chartjs"]},
+          "created_at": {"type": "string", "format": "date-time"},
+          "created_by": {"type": "string", "format": "uuid"}
+        }
+      },
+      "ChartListResponse": {
+        "type": "object",
+        "required": ["items", "meta"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/ChartResponse"}
+          },
+          "meta": {"$ref": "#/components/schemas/PaginationMeta"}
+        }
+      },
+      "ReportCreateRequest": {
+        "type": "object",
+        "required": ["title", "type"],
+        "properties": {
+          "title": {"type": "string"},
+          "type": {
+            "type": "string",
+            "enum": ["summary", "detailed", "executive", "custom"]
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "schedule": {
+            "type": "object",
+            "properties": {
+              "frequency": {"type": "string", "enum": ["once", "daily", "weekly", "monthly"]},
+              "next_run": {"type": "string", "format": "date-time"}
+            }
+          }
+        }
+      },
+      "ReportResponse": {
+        "type": "object",
+        "required": ["id", "title", "type", "status", "created_at", "created_by"],
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "title": {"type": "string"},
+          "type": {"type": "string"},
+          "status": {
+            "type": "string",
+            "enum": ["pending", "generating", "ready", "failed"]
+          },
+          "content": {"type": "object", "nullable": true},
+          "download_url": {"type": "string", "format": "uri", "nullable": true},
+          "parameters": {"type": "object"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "created_by": {"type": "string", "format": "uuid"},
+          "completed_at": {"type": "string", "format": "date-time", "nullable": true}
+        }
+      },
+      "ReportListResponse": {
+        "type": "object",
+        "required": ["items", "meta"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/ReportResponse"}
+          },
+          "meta": {"$ref": "#/components/schemas/PaginationMeta"}
+        }
+      },
+      "ForecastRequest": {
+        "type": "object",
+        "required": ["metric", "horizon"],
+        "properties": {
+          "metric": {"type": "string"},
+          "horizon": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365,
+            "description": "Number of days to forecast"
+          },
+          "historical_data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["date", "value"],
+              "properties": {
+                "date": {"type": "string", "format": "date"},
+                "value": {"type": "number"}
+              }
+            }
+          },
+          "confidence_level": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 0.99,
+            "default": 0.95
+          }
+        }
+      },
+      "ForecastResponse": {
+        "type": "object",
+        "required": ["id", "metric", "predictions", "created_at"],
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "metric": {"type": "string"},
+          "predictions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["date", "value", "lower_bound", "upper_bound"],
+              "properties": {
+                "date": {"type": "string", "format": "date"},
+                "value": {"type": "number"},
+                "lower_bound": {"type": "number"},
+                "upper_bound": {"type": "number"}
+              }
+            }
+          },
+          "confidence_level": {"type": "number"},
+          "model_info": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string"},
+              "accuracy_score": {"type": "number"}
+            }
+          },
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "LogEntry": {
+        "type": "object",
+        "required": ["timestamp", "level", "message"],
+        "properties": {
+          "timestamp": {"type": "string", "format": "date-time"},
+          "level": {"type": "string", "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]},
+          "message": {"type": "string"},
+          "logger": {"type": "string"},
+          "request_id": {"type": "string", "format": "uuid", "nullable": true},
+          "user_id": {"type": "string", "format": "uuid", "nullable": true},
+          "extra": {"type": "object", "additionalProperties": true}
+        }
+      },
+      "LogListResponse": {
+        "type": "object",
+        "required": ["items", "meta"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/LogEntry"}
+          },
+          "meta": {"$ref": "#/components/schemas/PaginationMeta"}
+        }
+      },
+      "AuditEvent": {
+        "type": "object",
+        "required": ["id", "action", "entity_type", "entity_id", "actor_id", "timestamp"],
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "action": {
+            "type": "string",
+            "enum": ["create", "update", "delete", "approve", "reject", "login", "logout"]
+          },
+          "entity_type": {"type": "string"},
+          "entity_id": {"type": "string", "format": "uuid"},
+          "actor_id": {"type": "string", "format": "uuid"},
+          "actor_email": {"type": "string", "format": "email"},
+          "actor_role": {"type": "string"},
+          "payload": {
+            "type": "object",
+            "description": "Snapshot of changes made",
+            "additionalProperties": true
+          },
+          "ip_address": {"type": "string"},
+          "user_agent": {"type": "string"},
+          "timestamp": {"type": "string", "format": "date-time"}
+        }
+      },
+      "AuditTimelineResponse": {
+        "type": "object",
+        "required": ["events", "meta"],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/AuditEvent"}
+          },
+          "meta": {"$ref": "#/components/schemas/PaginationMeta"}
+        }
+      },
+      "EntityHistoryResponse": {
+        "type": "object",
+        "required": ["entity_type", "entity_id", "events"],
+        "properties": {
+          "entity_type": {"type": "string"},
+          "entity_id": {"type": "string", "format": "uuid"},
+          "current_state": {"type": "object", "additionalProperties": true, "nullable": true},
+          "events": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/AuditEvent"}
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {"bearerAuth": []}
+  ]
+}
