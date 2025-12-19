@@ -1,0 +1,2 @@
+# verity-mvp
+Verity MVP es un monolito modular con FastAPI + React (Vite) para análisis de documentos y datos con un agente conversacional (“Veri”). Permite hacer preguntas sobre archivos tabulares (CSV/Excel) y documentos (PDF/texto), generar respuestas con trazabilidad (“FUENTES” con row_ids/filtros/columnas), y crear gráficas a partir de la última tabla del chat. Incluye autenticación (modo producción con sesión/Redis y modo dev), feature flags por módulo, y persistencia local de conversaciones para estabilidad en demo.
