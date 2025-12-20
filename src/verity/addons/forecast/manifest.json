@@ -1,0 +1,10 @@
+{
+  "addon": "forecast",
+  "version": "1.0",
+  "description": "Time series forecasting addon (Prophet/ARIMA)",
+  "tools": ["compute_forecast"],
+  "requires": ["run_table_query"],
+  "execution_mode": "local",
+  "endpoint": null,
+  "enabled": false
+}

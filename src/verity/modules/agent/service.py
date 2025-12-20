@@ -34,8 +34,8 @@ from verity.modules.agent.schemas import (
     Source,
 )
 
-# Sub-Agents
-from verity.modules.agent.doc_qa import DocQAAgent
+# Sub-Agents (LEGACY - moved to legacy_frozen/)
+# from verity.modules.agent.doc_qa import DocQAAgent  # Moved to legacy_frozen/doc_qa_agent.py (outside src/)
 from verity.modules.data import get_data_engine, DataEngineResponse
 from verity.modules.data.schemas import TablePreview
 from verity.modules.documents.service import DocumentsService # To get file list
@@ -167,7 +167,9 @@ class AgentService:
     """
 
     def __init__(self):
-        self.doc_qa = DocQAAgent()
+        # LEGACY: DocQAAgent moved to legacy_frozen/ (outside src/), disabled for now
+        # self.doc_qa = DocQAAgent()  # Commented out - use v2 API instead
+        self.doc_qa = None  # Placeholder to avoid breaking existing code
         self.data_engine = get_data_engine()
         self.doc_service = DocumentsService()
         self.gemini_client = get_gemini_client()
@@ -1102,147 +1104,24 @@ class AgentService:
                 return f"Error en el motor de datos: {e}", [], {}
 
         # Forecast branch (deterministic): build forecast_table + chart_spec
-        if should_forecast and response and response.table_preview:
+        # LEGACY: ForecastAgent moved to legacy_frozen/ - forecasting is now disabled
+        # TODO: Re-implement as addon/forecast microservice
+        if False and should_forecast and response and response.table_preview:
+            # Código comentado - ForecastAgent ya no está disponible
+            pass
+            """
             try:
                 import pandas as pd
-                from verity.modules.forecast.agent import ForecastAgent
+                # from verity.modules.forecast.agent import ForecastAgent  # MOVED TO legacy_frozen/
 
                 freq = self._infer_forecast_freq(original_user_query)
                 horizon = self._infer_forecast_horizon(original_user_query)
-
-                tp_dict = response.table_preview.model_dump() if hasattr(response.table_preview, "model_dump") else response.table_preview
-                cols = list(tp_dict.get("columns") or [])
-                rows = list(tp_dict.get("rows") or [])
-                df_src = pd.DataFrame(rows, columns=cols)
-
-                # Optional store support: if present, select explicitly or pick most common store.
-                used_store = None
-                if "store" in df_src.columns:
-                    if store_val:
-                        used_store = store_val
-                    else:
-                        try:
-                            vc = df_src["store"].astype(str).value_counts(dropna=True)
-                            used_store = str(vc.index[0]) if len(vc) else None
-                        except Exception:
-                            used_store = None
-
-                    if used_store is not None:
-                        df_src = df_src[df_src["store"].astype(str) == str(used_store)].copy()
-                        # Ensure single series by time
-                        if "time" in df_src.columns and "y" in df_src.columns:
-                            df_src = df_src[["time", "y"]].groupby("time", as_index=False).sum(numeric_only=True)
-
-                # Enforce required columns (fallback to user question if DataEngine didn't comply)
-                if "time" not in df_src.columns or "y" not in df_src.columns:
-                    return (
-                        "¿Qué columna es la fecha y cuál es la métrica a predecir?",
-                        [],
-                        {},
-                    )
-
-                forecaster = ForecastAgent()
-                result = forecaster.forecast(
-                    df_src,
-                    time_col="time",
-                    y_col="y",
-                    freq=freq,
-                    horizon=horizon,
-                    confidence=float(forecast_confidence or 0.80),
-                    model_type="auto",
-                )
-
-                out = result.forecast_table.copy()
-                # Make JSON-safe strings for time
-                out["time"] = out["time"].dt.strftime("%Y-%m-%d")
-
-                # UX rule: the confidence interval applies only to the forecast (future rows).
-                # For historical rows (where y is present), do NOT populate y_lo/y_hi.
-                try:
-                    hist_mask = out["y"].notna()
-                    out.loc[hist_mask, ["y_lo", "y_hi"]] = None
-                except Exception:
-                    pass
-
-                # Replace NaN/NaT with None for JSON
-                try:
-                    import pandas as pd
-
-                    out = out.where(pd.notna(out), None)
-                except Exception:
-                    pass
-
-                forecast_table = {
-                    "columns": ["time", "y", "y_hat", "y_lo", "y_hi"],
-                    "rows": out[["time", "y", "y_hat", "y_lo", "y_hi"]].values.tolist(),
-                    "total_rows": int(len(out)),
-                }
-
-                chart_spec = {
-                    "type": "plotly",
-                    "spec": {
-                        "version": "1.0",
-                        "chart_type": "forecast",
-                        "title": "Pronóstico",
-                        "subtitle": None,
-                        "x": {"field": "time", "type": "date", "label": "Fecha"},
-                        "y": {"field": "y", "type": "number", "label": "Valor"},
-                        "format": self._infer_format("y"),
-                    },
-                }
-
-                # Overwrite response artifacts for downstream packaging
-                response.chart_spec = chart_spec
-                response.evidence_ref = (response.evidence_ref or "") + " | " + result.evidence_ref
-
-                # Deterministic assistant message (avoid hallucination)
-                assistant_message = (
-                    f"Listo: se generó un pronóstico con frecuencia **{freq}** para los próximos **{horizon}** periodos "
-                    f"con intervalo **{int(round(float(forecast_confidence or 0.80) * 100))}%**." 
-                    + (f" (Store={used_store})." if used_store else "")
-                    + " Incluye histórico, pronóstico y una banda de incertidumbre robusta (MAD + winsorización de outliers)."
-                )
-
-                # Prepare metadata and return early (skip synthesis LLM + chart-choice)
-                from verity.modules.agent.schemas import DataEvidence, ValueInfo
-
-                # Note: For forecasts we typically operate on an aggregated time series.
-                # Row-level evidence may be unavailable or not meaningful, so we don't block.
-
-                data_evidence = DataEvidence(
-                    operation="forecast",
-                    match_policy=response.match_policy or "all",
-                    filter_applied=response.filters_applied[0] if response.filters_applied else None,
-                    columns_used=response.columns_used or ["time", "y"],
-                    row_ids=response.row_ids or [],
-                    row_count=response.row_count,
-                    row_limit=response.row_limit,
-                    sample_rows=response.sample_rows[:3] if response.sample_rows else [],
-                    result_value=None,
-                )
-
-                source = Source(
-                    type="data",
-                    file=doc.display_name,
-                    canonical_file_id=str(doc.id),
-                    data_evidence=data_evidence,
-                    id=str(uuid4()),
-                    title=f"Forecast: {doc.display_name}",
-                    relevance=1.0,
-                )
-
-                metadata = {
-                    "chart_spec": chart_spec,
-                    "table_preview": forecast_table,
-                    "evidence_ref": response.evidence_ref,
-                }
-
-                return assistant_message, [source], metadata
-
-            except Exception as e:
-                logger.error(f"[FORECAST] Failed: {e}")
-                return f"No pude generar el pronóstico: {e}", [], {}
-
+                # ... (resto del código de forecast comentado - ver legacy_frozen/forecast_agent.py)
+            """
+            pass
+        
+        # END OF LEGACY FORECAST CODE BLOCK
+        
         # 4. Validate evidence for tabular results
         # If we got a scalar or table result, the code should exist
         if response.answer_type in ["scalar", "table"] and not response.executed_code:

@@ -9,3 +9,6 @@ __pycache__/
 .env.*
 node_modules/
 dist/
+
+# Local reference repos (do not commit)
+references/

@@ -26,14 +26,21 @@ def _get_api_key() -> str:
     
     Resolution order:
     1. GEMINI_API_KEY environment variable
-    2. .env.local file
-    3. Secret Manager (production)
+    2. Settings (supports .env via pydantic-settings)
+    3. .env.local file
+    4. Secret Manager (production)
     """
     # Try environment variable first
     api_key = os.environ.get("GEMINI_API_KEY")
     if api_key:
         logger.info("Using Gemini API key from environment variable")
         return api_key
+
+    # Try application settings (.env via pydantic-settings)
+    settings = get_settings()
+    if settings.gemini.api_key:
+        logger.info("Using Gemini API key from settings (.env/env)")
+        return settings.gemini.api_key
     
     # Try .env.local file
     env_local = Path(__file__).parent.parent.parent.parent / ".env.local"
@@ -46,7 +53,6 @@ def _get_api_key() -> str:
                     return api_key
     
     # Try Secret Manager in production
-    settings = get_settings()
     if settings.is_production:
         try:
             from google.cloud import secretmanager

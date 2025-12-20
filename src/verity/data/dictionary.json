@@ -1,0 +1,115 @@
+{
+  "version": "1.0",
+  "updated_at": "2025-12-20T00:00:00Z",
+  "description": "Data Dictionary para Verity - Definiciones canónicas de tablas y métricas",
+  "tables": {
+    "orders": {
+      "description": "Órdenes realizadas en la plataforma",
+      "grain": "1 row = 1 order",
+      "primary_key": "order_id",
+      "time_column": "order_date",
+      "columns": {
+        "order_id": {
+          "type": "string",
+          "description": "Identificador único de la orden"
+        },
+        "customer_id": {
+          "type": "string",
+          "description": "Identificador del cliente que realizó la orden"
+        },
+        "order_status": {
+          "type": "string",
+          "description": "Estado de la orden: pending | delivered | cancelled"
+        },
+        "order_date": {
+          "type": "date",
+          "description": "Fecha en que se realizó la orden"
+        },
+        "order_amount": {
+          "type": "number",
+          "description": "Monto total de la orden en moneda local"
+        }
+      }
+    }
+  },
+  "metrics": {
+    "total_orders": {
+      "description": "Total de órdenes (todas, sin filtro de status)",
+      "table": "orders",
+      "expression": "COUNT(order_id)",
+      "data_type": "integer",
+      "requires": ["order_id"],
+      "filters": [],
+      "aliases": ["orders", "num_orders", "cantidad de ordenes", "número de órdenes"],
+      "format": "number"
+    },
+    "total_revenue": {
+      "description": "Ingresos totales de órdenes entregadas",
+      "table": "orders",
+      "expression": "SUM(order_amount)",
+      "data_type": "number",
+      "requires": ["order_amount", "order_status"],
+      "filters": [
+        {
+          "column": "order_status",
+          "operator": "=",
+          "value": "delivered"
+        }
+      ],
+      "aliases": ["revenue", "sales", "ingresos", "ventas", "ingresos totales", "tot_reven"],
+      "format": "currency",
+      "business_notes": "Solo se cuentan órdenes con status 'delivered'"
+    },
+    "gross_revenue": {
+      "description": "Ingresos brutos (suma de montos de todas las órdenes, sin filtro de status)",
+      "table": "orders",
+      "expression": "SUM(order_amount)",
+      "data_type": "number",
+      "requires": ["order_amount"],
+      "filters": [],
+      "aliases": ["gross revenue", "ventas", "ventas brutas", "ingresos brutos"],
+      "format": "currency",
+      "business_notes": "Incluye todas las órdenes, sin filtrar por status"
+    },
+    "repeat_customers": {
+      "description": "Clientes con más de una orden entregada",
+      "table": "orders",
+      "expression": "COUNT(DISTINCT customer_id) FILTER (WHERE order_count > 1)",
+      "data_type": "integer",
+      "requires": ["customer_id", "order_status"],
+      "filters": [
+        {
+          "column": "order_status",
+          "operator": "=",
+          "value": "delivered"
+        }
+      ],
+      "aliases": ["retention", "returning_customers", "clientes recurrentes", "clientes que regresan"],
+      "format": "number",
+      "business_notes": "Un cliente se considera recurrente si tiene más de una orden con status 'delivered'"
+    },
+    "avg_order_value": {
+      "description": "Valor promedio por orden entregada",
+      "table": "orders",
+      "expression": "AVG(order_amount)",
+      "data_type": "number",
+      "requires": ["order_amount", "order_status"],
+      "filters": [
+        {
+          "column": "order_status",
+          "operator": "=",
+          "value": "delivered"
+        }
+      ],
+      "aliases": ["aov", "average order value", "ticket promedio", "valor promedio"],
+      "format": "currency"
+    }
+  },
+  "changelog": [
+    {
+      "version": "1.0",
+      "date": "2025-12-20",
+      "change": "Initial data dictionary with orders table and 4 canonical metrics"
+    }
+  ]
+}

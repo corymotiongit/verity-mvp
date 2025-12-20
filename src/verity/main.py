@@ -32,6 +32,9 @@ from verity.modules.tags import router as tags_router
 from verity.modules.admin import router as admin_router
 from verity.modules.otp import router as otp_router
 
+# Import v2 API (new architecture)
+from verity.api.routes.query_v2 import router as query_v2_router
+
 # Configure standard logging
 logging.basicConfig(
     level=logging.INFO,
@@ -182,6 +185,7 @@ async def health_check():
 # Register Module Routers
 # =============================================================================
 
+# Legacy routers (old architecture)
 app.include_router(documents_router)
 app.include_router(approvals_router)
 app.include_router(agent_router)
@@ -193,6 +197,9 @@ app.include_router(audit_router)
 app.include_router(tags_router)
 app.include_router(admin_router)
 app.include_router(otp_router)
+
+# v2 API (new architecture - tool-based)
+app.include_router(query_v2_router)
 
 
 # =============================================================================

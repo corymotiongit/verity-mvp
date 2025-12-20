@@ -1,5 +1,16 @@
 """Deterministic forecasting (no LLM).
 
+LEGACY CODE - FROZEN - DO NOT IMPORT
+"""
+raise RuntimeError(
+    "LEGACY CODE IS FROZEN - This file has been moved to legacy_frozen/ and must not be imported. "
+    "Use addons/forecast/ as optional microservice instead. See /src/verity/core/ for new implementation."
+)
+
+# The code below is preserved for reference only and will never execute
+# ============================================================================
+
+"""
 This module is used by the orchestrator (AgentService) to produce simple,
 audit-friendly forecasts from an already-aggregated time series table.
 

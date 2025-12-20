@@ -114,3 +114,105 @@ class ExternalServiceException(VerityException):
             status_code=502,
             details={"service": service_name},
         )
+
+
+class SemanticResolutionException(VerityException):
+    """Raised when semantic resolution fails deterministically."""
+
+    def __init__(self, code: str, message: str, details: dict[str, Any] | None = None):
+        super().__init__(
+            code=code,
+            message=message,
+            status_code=400,
+            details=details,
+        )
+
+
+class UnresolvedMetricException(SemanticResolutionException):
+    """Raised when no metric can be resolved above threshold."""
+
+    def __init__(self, user_input: str, suggestions: list[dict[str, Any]] | None = None):
+        super().__init__(
+            code="UNRESOLVED_METRIC",
+            message="Could not resolve requested metric from the data dictionary.",
+            details={
+                "user_input": user_input,
+                "suggestions": suggestions or [],
+            },
+        )
+
+
+class AmbiguousMetricException(SemanticResolutionException):
+    """Raised when multiple metrics match above threshold and are too close to disambiguate."""
+
+    def __init__(self, user_input: str, candidates: list[dict[str, Any]]):
+        super().__init__(
+            code="AMBIGUOUS_METRIC",
+            message="Metric request is ambiguous; clarification is required.",
+            details={
+                "user_input": user_input,
+                "candidates": candidates,
+            },
+        )
+
+
+class NoTableMatchException(SemanticResolutionException):
+    """Raised when resolved metric targets a table not available in the current context."""
+
+    def __init__(self, table: str, available_tables: list[str]):
+        super().__init__(
+            code="NO_TABLE_MATCH",
+            message="Resolved metric requires a table that is not available in the current context.",
+            details={
+                "table": table,
+                "available_tables": available_tables,
+            },
+        )
+
+
+class RunTableQueryException(VerityException):
+    """Raised when run_table_query fails deterministically."""
+
+    def __init__(self, code: str, message: str, status_code: int = 400, details: dict[str, Any] | None = None):
+        super().__init__(
+            code=code,
+            message=message,
+            status_code=status_code,
+            details=details,
+        )
+
+
+class InvalidFilterException(RunTableQueryException):
+    """Raised when a filter spec is invalid or uses unsupported operators."""
+
+    def __init__(self, message: str = "Invalid filter specification.", details: dict[str, Any] | None = None):
+        super().__init__(
+            code="INVALID_FILTER",
+            message=message,
+            status_code=400,
+            details=details,
+        )
+
+
+class TypeMismatchException(RunTableQueryException):
+    """Raised when a filter/metric expects a different type (or NaNs are present where forbidden)."""
+
+    def __init__(self, message: str = "Type mismatch while executing table query.", details: dict[str, Any] | None = None):
+        super().__init__(
+            code="TYPE_MISMATCH",
+            message=message,
+            status_code=400,
+            details=details,
+        )
+
+
+class EmptyResultException(RunTableQueryException):
+    """Raised when filters produce an empty dataset (hard fail by contract)."""
+
+    def __init__(self, message: str = "Query returned no rows.", details: dict[str, Any] | None = None):
+        super().__init__(
+            code="EMPTY_RESULT",
+            message=message,
+            status_code=404,
+            details=details,
+        )
