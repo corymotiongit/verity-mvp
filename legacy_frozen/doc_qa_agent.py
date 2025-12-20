@@ -1,3 +1,11 @@
+raise RuntimeError(
+    "LEGACY CODE IS FROZEN - This file has been moved to legacy_frozen/ and must not be imported. "
+    "Use the new v2 API with tool-based architecture instead. See /src/verity/core/ for new implementation."
+)
+
+# The code below is preserved for reference only and will never execute
+# ============================================================================
+
 import logging
 from typing import List, Dict, Any, Optional
 

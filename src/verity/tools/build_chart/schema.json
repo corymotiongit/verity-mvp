@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "build_chart@2.0",
+  "description": "Convierte tabla de datos a especificación de gráfica (Plotly/Recharts)",
+  "input": {
+    "type": "object",
+    "properties": {
+      "table_id": {
+        "type": "string",
+        "description": "ID de la tabla generada por run_table_query"
+      },
+      "chart_kind": {
+        "type": "string",
+        "enum": ["bar", "line", "scatter", "heatmap", "pie", "stacked_bar", "area"],
+        "description": "Tipo de gráfica (hard-coded por core según Intent, NUNCA decidido por LLM)"
+      },
+      "x_axis": {
+        "type": "string",
+        "description": "Columna para eje X"
+      },
+      "y_axes": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Columnas para eje Y (puede ser múltiple para series)"
+      },
+      "color_column": {
+        "type": "string",
+        "description": "Columna para segmentación por color (opcional)"
+      },
+      "format": {
+        "type": "object",
+        "properties": {
+          "x_format": {"type": "string", "enum": ["number", "currency", "percent", "date"]},
+          "y_format": {"type": "string", "enum": ["number", "currency", "percent", "date"]}
+        },
+        "description": "Formato de ejes"
+      },
+      "title": {
+        "type": "string",
+        "description": "Título de la gráfica"
+      }
+    },
+    "required": ["table_id", "chart_kind", "x_axis", "y_axes"]
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "chart_spec": {
+        "type": "object",
+        "description": "Especificación completa de la gráfica (Plotly JSON)"
+      },
+      "library": {
+        "type": "string",
+        "enum": ["plotly", "recharts"],
+        "description": "Librería de visualización target"
+      },
+      "chart_id": {
+        "type": "string",
+        "description": "ID único de la gráfica generada"
+      }
+    },
+    "required": ["chart_spec", "library", "chart_id"]
+  },
+  "deterministic": true,
+  "version": "2.0"
+}

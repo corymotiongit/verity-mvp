@@ -25,8 +25,8 @@ from .schemas import (
 from .profiler import DatasetProfiler
 from .value_index import ValueIndexBuilder
 from .sandbox import DataSandbox
-from .agent import CodeGeneratorAgent
-from .charts import ChartAgent
+# from .agent import CodeGeneratorAgent  # Moved to legacy_frozen/code_generator_agent.py (outside src/)
+# from .charts import ChartAgent  # Moved to legacy_frozen/chart_agent.py (outside src/)
 from .value_resolver import ValueResolver, get_value_resolver, get_org_alias_memory
 
 logger = logging.getLogger(__name__)
@@ -104,8 +104,10 @@ class DataEngine:
         self.profiler = DatasetProfiler()
         self.index_builder = ValueIndexBuilder()
         self.sandbox = DataSandbox()
-        self.code_generator = CodeGeneratorAgent()
-        self.chart_agent = ChartAgent()
+        # LEGACY: CodeGeneratorAgent and ChartAgent have been moved to legacy_frozen/ (outside src/)
+        # These are set to None to avoid breaking existing code
+        self.code_generator = None  # Was: CodeGeneratorAgent()
+        self.chart_agent = None  # Was: ChartAgent()
         self.cache = _cache
         
     def clear_cache(self):

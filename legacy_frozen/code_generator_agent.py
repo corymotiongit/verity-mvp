@@ -1,6 +1,17 @@
 """
 Verity Data Engine - Code Generator Agent
 
+LEGACY CODE - FROZEN - DO NOT IMPORT
+"""
+raise RuntimeError(
+    "LEGACY CODE IS FROZEN - This file has been moved to legacy_frozen/ and must not be imported. "
+    "Use tools/resolve_semantics and tools/run_table_query instead. See /src/verity/core/ for new implementation."
+)
+
+# The code below is preserved for reference only and will never execute
+# ============================================================================
+
+"""
 Generates Python/Pandas code from natural language queries.
 Works with pre-resolved columns and values from Intent Router.
 Includes auto-retry logic for error recovery.

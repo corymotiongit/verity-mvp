@@ -62,6 +62,14 @@ class GCPSettings(BaseSettings):
     # Note: No Vertex AI settings - using Gemini Developer API
 
 
+class GeminiSettings(BaseSettings):
+    """Gemini API configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="GEMINI_")
+
+    api_key: str = Field(default="", description="Gemini API Key")
+
+
 class N8NSettings(BaseSettings):
     """n8n webhook configuration (OTP)."""
 
@@ -139,6 +147,7 @@ class Settings(BaseSettings):
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
     gcp: GCPSettings = Field(default_factory=GCPSettings)
+    gemini: GeminiSettings = Field(default_factory=GeminiSettings)
 
     n8n: N8NSettings = Field(default_factory=N8NSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)

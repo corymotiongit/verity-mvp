@@ -29,6 +29,8 @@ dependencies = [
     "sse-starlette>=1.8.0",
     "structlog>=24.1.0",
     "redis>=5.0.0",
+    "rapidfuzz>=3.5.0",
+    "jsonschema>=4.20.0",
 ]
 
 [project.optional-dependencies]
@@ -52,6 +54,13 @@ select = ["E", "F", "I", "N", "W", "UP"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+filterwarnings = [
+    # Third-party deps: noisy deprecations in our current dependency set.
+    'ignore::pydantic.warnings.PydanticDeprecatedSince212',
+    'ignore::pydantic.warnings.PydanticDeprecatedSince20',
+    'ignore:.*datetime\.datetime\.utcnow\(\) is deprecated.*:DeprecationWarning',
+    'ignore::FutureWarning:verity.core.response_composer',
+]
 
 [tool.mypy]
 python_version = "3.11"

@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "resolve_semantics@1.0",
+  "description": "Resuelve pregunta del usuario a plan semántico usando Data Dictionary",
+  "input": {
+    "type": "object",
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "Pregunta original del usuario"
+      },
+      "intent": {
+        "type": "string",
+        "description": "Intent resuelto por el pipeline (ej: 'aggregate', 'compare')"
+      },
+      "data_dictionary_version": {
+        "type": "string",
+        "description": "Versión del Data Dictionary a usar",
+        "default": "latest"
+      },
+      "available_tables": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Tablas disponibles en el contexto actual"
+      }
+    },
+    "required": ["question", "available_tables"]
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "data_dictionary_version": {
+        "type": "string",
+        "description": "Versión efectiva del Data Dictionary usado para resolver (ej: '1.0')"
+      },
+      "tables": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Tablas necesarias para responder"
+      },
+      "metrics": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string"},
+            "alias_matched": {"type": "string", "description": "Alias canónico del Data Dictionary que hizo match"},
+            "definition": {"type": "string"},
+            "requires": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Columnas requeridas por la métrica (desde Data Dictionary)"
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "column": {"type": "string"},
+                  "operator": {"type": "string", "enum": ["=", "!=", ">", "<", ">=", "<=", "IN", "LIKE"]},
+                  "value": {}
+                },
+                "required": ["column", "operator", "value"]
+              },
+              "description": "Filtros automáticos de la métrica (desde Data Dictionary)"
+            },
+            "format": {
+              "type": "string",
+              "description": "Formato recomendado para presentar el resultado (ej: currency, number)"
+            },
+            "match_score": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Score de similitud (0-100) del match semántico"
+            },
+            "matched_phrase": {
+              "type": "string",
+              "description": "Frase candidata (derivada de la pregunta) que produjo el match"
+            }
+          },
+          "required": ["name", "alias_matched", "definition"]
+        },
+        "description": "Métricas resueltas desde el Data Dictionary con alias canónico"
+      },
+      "filters": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "column": {"type": "string"},
+            "operator": {"type": "string", "enum": ["=", "!=", ">", "<", ">=", "<=", "IN", "LIKE"]},
+            "value": {}
+          },
+          "required": ["column", "operator", "value"]
+        },
+        "description": "Filtros inferidos de la pregunta"
+      },
+      "time_grain": {
+        "type": "string",
+        "enum": ["day", "week", "month", "quarter", "year"],
+        "description": "Granularidad temporal si aplica"
+      },
+      "time_column": {
+        "type": "string",
+        "description": "Columna temporal canónica (desde Data Dictionary) si aplica"
+      },
+      "group_by": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Group-by sugerido por semántica (ej: ['order_date__month'])"
+      },
+      "baseline_period": {
+        "type": "object",
+        "description": "Periodo base para comparación (tokens relativos deterministas)",
+        "properties": {
+          "relative": {"type": "string"}
+        },
+        "required": ["relative"]
+      },
+      "compare_period": {
+        "type": "object",
+        "description": "Periodo a comparar (tokens relativos deterministas)",
+        "properties": {
+          "relative": {"type": "string"}
+        },
+        "required": ["relative"]
+      },
+      "confidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Confianza en la resolución semántica (DEBE persistirse por conversación para tracking)"
+      },
+      "unresolved_terms": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Términos que no se pudieron mapear al diccionario"
+      }
+    },
+    "required": ["data_dictionary_version", "tables", "metrics", "filters", "confidence", "unresolved_terms"]
+  },
+  "deterministic": false,
+  "version": "1.0"
+}

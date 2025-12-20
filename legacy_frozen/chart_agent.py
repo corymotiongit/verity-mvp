@@ -1,3 +1,11 @@
+raise RuntimeError(
+    "LEGACY CODE IS FROZEN - This file has been moved to legacy_frozen/ and must not be imported. "
+    "Use tools/build_chart for deterministic chart generation instead. See /src/verity/core/ for new implementation."
+)
+
+# The code below is preserved for reference only and will never execute
+# ============================================================================
+
 import json
 import logging
 from typing import Dict, Any, Optional

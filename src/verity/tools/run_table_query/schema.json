@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "run_table_query@1.0",
+  "description": "Ejecuta query sobre tabla y retorna resultado estructurado",
+  "input": {
+    "type": "object",
+    "properties": {
+      "table": {
+        "type": "string",
+        "description": "Nombre de la tabla objetivo"
+      },
+      "columns": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Columnas a seleccionar (resueltas desde metrics map del Data Dictionary, NO del LLM)"
+      },
+      "metrics": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string"},
+            "sql": {"type": "string"}
+          },
+          "required": ["name", "sql"]
+        },
+        "description": "Métricas calculadas (provistas por resolve_semantics)"
+      },
+      "filters": {
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "column": {"type": "string"},
+                "operator": {"type": "string"},
+                "value": {}
+              },
+              "required": ["column", "operator", "value"]
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "op": {"type": "string", "description": "AND/OR"},
+              "conditions": {"type": "array", "items": {"type": "object"}}
+            },
+            "required": ["op", "conditions"]
+          }
+        ],
+        "description": "Filtros WHERE"
+      },
+      "group_by": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Columnas para GROUP BY"
+      },
+      "order_by": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "column": {"type": "string"},
+            "direction": {"type": "string", "enum": ["ASC", "DESC"]}
+          },
+          "required": ["column"]
+        },
+        "description": "Ordenamiento"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10000,
+        "description": "Máximo de filas a retornar",
+        "default": 1000
+      }
+    },
+    "required": ["table", "columns"]
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "table_id": {
+        "type": "string",
+        "description": "ID único del resultado (para referencia en build_chart)"
+      },
+      "columns": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Nombres de columnas del resultado"
+      },
+      "rows": {
+        "type": "array",
+        "items": {
+          "type": "array"
+        },
+        "description": "Filas del resultado como arrays de valores"
+      },
+      "row_count": {
+        "type": "integer",
+        "description": "Número de filas retornadas"
+      },
+      "execution_time_ms": {
+        "type": "number",
+        "description": "Tiempo de ejecución en milisegundos"
+      },
+      "rows_count": {
+        "type": "integer",
+        "description": "Alias de row_count para checkpointing"
+      },
+      "schema": {
+        "type": "object",
+        "description": "Schema simple del resultado (columna -> dtype)"
+      }
+    },
+    "required": ["table_id", "columns", "rows", "row_count"]
+  },
+  "deterministic": true,
+  "version": "1.0"
+}

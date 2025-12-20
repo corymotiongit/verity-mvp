@@ -140,6 +140,29 @@ Stores are cached internally using the format:
 
 ## API Endpoints
 
+## OpenAPI / Swagger
+
+Después de modificar endpoints o schemas, actualiza la especificación:
+
+```bash
+python scripts/sync_openapi.py
+```
+
+Esto regenerará y validará `openapi.json` a partir del servidor FastAPI.
+
+Nota: Los endpoints versionados (`/v2/*`) viven en el mismo `openapi.json`.
+
+### Reglas implícitas (no escritas, pero reales)
+
+- ❌ No editar `openapi.json` a mano
+- ✅ La spec se genera desde el server
+- ✅ CI debe fallar si `openapi.json` está desincronizado
+
+### Extra (si te sirve)
+
+- Añade un **CI check** que compare hash del `openapi.json` (o usa `python scripts/check_openapi_sync.py`)
+- O un **pre-commit hook** que ejecute `scripts/sync_openapi.py`
+
 ### Documents Module
 | Method | Endpoint | Description |
 |--------|----------|-------------|
