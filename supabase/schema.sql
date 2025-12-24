@@ -40,6 +40,20 @@ CREATE TABLE IF NOT EXISTS profiles (
 CREATE INDEX idx_profiles_org_id ON profiles(org_id);
 
 -- =============================================================================
+-- Users (Identity)
+-- WhatsApp identity store (no OTP)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    wa_id TEXT UNIQUE NOT NULL,
+    phone_number TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_login TIMESTAMPTZ
+);
+
+CREATE INDEX idx_users_wa_id ON users(wa_id);
+
+-- =============================================================================
 -- User Roles
 -- Role-based access control
 -- =============================================================================

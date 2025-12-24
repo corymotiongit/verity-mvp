@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from verity.auth import create_access_token
 from verity.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
@@ -62,35 +63,41 @@ async def _post_json(url: str, payload: dict[str, Any], timeout_s: float) -> tup
         return (r.status_code, None)
 
 
-async def _get_stored_otp(settings: Settings, user_id: str) -> str | None:
-    """Fetch stored OTP from Redis using n8n's key format: otp:<userId>."""
+async def _rate_limit_otp_validate(settings: Settings, *, request: Request, user_id: str) -> tuple[bool, str | None]:
+    """Simple fixed-window rate limit for OTP validate.
+
+    Redis is used as the shared store (recommended). If Redis is unavailable:
+    - non-production: allow (demo-friendly)
+    - production: block with provider down
+    """
+
     try:
-        import json
         import redis.asyncio as redis  # type: ignore
 
-        client = redis.Redis.from_url(settings.redis.url, decode_responses=False)
-        key = f"{settings.redis.otp_key_prefix}{user_id}"
-        raw = await client.get(key)
-        if raw is None:
-            return None
-        text = raw.decode("utf-8", errors="replace") if isinstance(raw, (bytes, bytearray)) else str(raw)
-        text = (text or "").strip()
-        if not text:
-            return None
+        client = redis.Redis.from_url(settings.redis.url, decode_responses=True)
+        ip = (
+            request.headers.get("x-forwarded-for")
+            or request.client.host
+            if request.client
+            else "unknown"
+        )
+        ip = (ip or "unknown").split(",")[0].strip()
+        key = f"rl:otp_validate:{ip}:{user_id}"
+        ttl_seconds = 60
+        limit = 10
 
-        # n8n stores JSON string: { otp, expiresAt, attempts }
-        if text.startswith("{"):
-            try:
-                data = json.loads(text)
-                if isinstance(data, dict) and isinstance(data.get("otp"), str):
-                    return data["otp"]
-            except Exception:
-                return None
-
-        # fallback: raw value is the OTP itself
-        return text
+        pipe = client.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, ttl_seconds)
+        res = await pipe.execute()
+        count = int(res[0]) if res and res[0] is not None else 0
+        if count > limit:
+            return False, "OTP_RATE_LIMITED"
+        return True, None
     except Exception:
-        return None
+        if settings.is_production:
+            return False, "AUTH_PROVIDER_DOWN"
+        return True, None
 
 
 @router.post("/request")
@@ -166,6 +173,12 @@ async def otp_validate(payload: OtpValidateIn, request: Request, settings: Setti
     """Proxy OTP validate to n8n. FastAPI never validates OTP itself."""
     request_id = getattr(request.state, "request_id", "unknown")
 
+    allowed, rl_error = await _rate_limit_otp_validate(settings, request=request, user_id=payload.userId)
+    if not allowed:
+        if rl_error == "AUTH_PROVIDER_DOWN":
+            return JSONResponse(status_code=503, content={"ok": False, "error": "AUTH_PROVIDER_DOWN"})
+        return JSONResponse(status_code=429, content={"ok": False, "error": rl_error or "OTP_RATE_LIMITED"})
+
     # Local MVP mock: accept a fixed OTP and return a dummy session token.
     # With AUTH_INSECURE_DEV_BYPASS enabled, the rest of the API won't require Redis anyway.
     if settings.auth_insecure_dev_bypass and not settings.is_production:
@@ -173,6 +186,11 @@ async def otp_validate(payload: OtpValidateIn, request: Request, settings: Setti
             logger.info(f"[{request_id}] OTP_VALIDATE (mock) userId={payload.userId} -> fail")
             return JSONResponse(status_code=401, content={"ok": False, "error": "OTP_INVALID"})
 
+        access_token, expires_in = create_access_token(
+            settings=settings,
+            user_id_raw=payload.userId,
+            roles=["admin"],
+        )
         logger.info(f"[{request_id}] OTP_VALIDATE (mock) userId={payload.userId} -> ok")
         return JSONResponse(
             status_code=200,
@@ -181,6 +199,9 @@ async def otp_validate(payload: OtpValidateIn, request: Request, settings: Setti
                 "userId": payload.userId,
                 "sessionToken": "local-dev-token",
                 "expiresAt": None,
+                "access_token": access_token,
+                "token_type": "bearer",
+                "expires_in": expires_in,
             },
         )
 
@@ -190,15 +211,9 @@ async def otp_validate(payload: OtpValidateIn, request: Request, settings: Setti
 
     url = _n8n_url(settings.n8n.base_url, settings.n8n.otp_validate_path)
 
-    # Adapt to your current n8n validate flow which compares providedOtp === body.stored_otp
-    stored_otp = await _get_stored_otp(settings, payload.userId)
+    # n8n is the source of truth for OTP validation and Redis-backed attempts/TTL.
+    # FastAPI never reads OTPs from Redis.
     n8n_payload: dict[str, Any] = {"userId": payload.userId, "otp": payload.otp}
-    if stored_otp:
-        n8n_payload["stored_otp"] = stored_otp
-    elif not settings.is_production:
-        # MVP/local fallback: if we can't reach Redis, keep the flow unblocked.
-        # (Your current n8n validate compares `otp` vs `stored_otp` from body.)
-        n8n_payload["stored_otp"] = payload.otp
 
     result = await _post_json(url, n8n_payload, settings.n8n.timeout_seconds)
 
@@ -215,35 +230,48 @@ async def otp_validate(payload: OtpValidateIn, request: Request, settings: Setti
     if ok:
         session_token = data.get("sessionToken")
         expires_at = data.get("expiresAt")
-        if not isinstance(session_token, str) or not session_token:
-            logger.warning(f"[{request_id}] OTP_VALIDATE userId={payload.userId} -> missing_sessionToken")
-            return JSONResponse(status_code=502, content={"ok": False, "error": "BAD_N8N_RESPONSE"})
+        access_token, expires_in = create_access_token(
+            settings=settings,
+            user_id_raw=payload.userId,
+            roles=["user"],
+        )
 
         logger.info(f"[{request_id}] OTP_VALIDATE userId={payload.userId} -> ok")
         # Return only the fields promised by API (never echo OTP).
-        return JSONResponse(
-            status_code=200,
-            content={
-                "ok": True,
-                "userId": payload.userId,
-                "sessionToken": session_token,
-                "expiresAt": expires_at,
-            },
-        )
+        content: dict[str, Any] = {
+            "ok": True,
+            "userId": payload.userId,
+            "expiresAt": expires_at,
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": expires_in,
+        }
+
+        # Backwards compatibility for current frontend: keep sessionToken if n8n returns it.
+        if isinstance(session_token, str) and session_token:
+            content["sessionToken"] = session_token
+
+        return JSONResponse(status_code=200, content=content)
 
     # Fail path
     # Fail path (n8n may return 4xx/5xx with an error/message)
-    err = None
-    if isinstance(data.get("error"), str):
+    err: str | None = None
+    if isinstance(data.get("error_code"), str):
+        err = data.get("error_code")
+    elif isinstance(data.get("error"), str):
         err = data.get("error")
     elif isinstance(data.get("message"), str):
         err = data.get("message")
 
-    # Normalize common n8n error text
-    if isinstance(err, str) and "OTP" in err.upper() and "INVALID" in err.upper():
-        err = "OTP_INVALID"
-    if isinstance(err, str) and "INVÁLIDO" in err.lower():
-        err = "OTP_INVALID"
+    if isinstance(err, str):
+        if err not in {"OTP_INVALID", "OTP_EXPIRED", "OTP_RATE_LIMITED"}:
+            # Normalize common n8n error text
+            if "EXPIRED" in err.upper() or "EXPIR" in err.lower():
+                err = "OTP_EXPIRED"
+            elif "RATE" in err.upper() or "TOO" in err.upper() or "INTENT" in err.lower():
+                err = "OTP_RATE_LIMITED"
+            else:
+                err = "OTP_INVALID"
 
     if not isinstance(err, str) or not err:
         err = "OTP_INVALID"

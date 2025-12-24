@@ -1,0 +1,99 @@
+{
+  "name": "Shadowcat-OTP-Check",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shadowcat-otp-check",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-check",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "check-verified"
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $input.item.json || {};\n\nfunction toObj(value) {\n  if (!value) return null;\n  if (typeof value === 'object') return value;\n  if (typeof value === 'string') {\n    const s = value.trim();\n    if (!s) return null;\n    if (s.startsWith('{') || s.startsWith('[')) {\n      try { return JSON.parse(s); } catch (e) { return null; }\n    }\n  }\n  return null;\n}\n\nconst candidates = [\n  toObj(incoming.body),\n  toObj(incoming),\n].filter(Boolean);\n\nfunction pickFirst(keyList) {\n  for (const obj of candidates) {\n    for (const k of keyList) {\n      if (obj && typeof obj[k] !== 'undefined' && obj[k] !== null) {\n        const v = obj[k].toString().trim();\n        if (v) return v;\n      }\n    }\n  }\n  return '';\n}\n\nconst wa_id = pickFirst(['wa_id', 'userId']);\n\nif (!wa_id) {\n  return { json: { ok: false, error: 'WA_ID_MISSING' } };\n}\n\nreturn {\n  json: {\n    ok: true,\n    wa_id,\n    // Buscar en Redis por patrón verify:*\n    redis_pattern: `verify:*`\n  }\n};"
+      },
+      "id": "code-parse",
+      "name": "Parse Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Buscar código verificado en Redis\n// Redis no tiene un método directo de búsqueda por patrón en n8n,\n// así que asumimos que el frontend guarda el código en memoria\n// y lo envía en el request\n\nconst incoming = $('Webhook Trigger').item.json;\nconst body = incoming.body || incoming;\nconst verifyCode = body.verifyCode || body.code;\n\nif (!verifyCode) {\n  return {\n    json: {\n      verified: false,\n      error: 'NO_CODE_PROVIDED'\n    }\n  };\n}\n\nreturn {\n  json: {\n    ok: true,\n    wa_id: $json.wa_id,\n    redis_key: `verify:${verifyCode}`\n  }\n};"
+      },
+      "id": "code-find-code",
+      "name": "Find Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "={{ $json.redis_key }}"
+      },
+      "id": "redis-get",
+      "name": "Get Status",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const redisValue = $input.item.json.value;\n\nif (!redisValue) {\n  return {\n    json: {\n      verified: false\n    }\n  };\n}\n\nlet data;\ntry {\n  data = JSON.parse(redisValue);\n} catch (e) {\n  return { json: { verified: false } };\n}\n\nif (data.verified !== true) {\n  return {\n    json: {\n      verified: false\n    }\n  };\n}\n\nreturn {\n  json: {\n    verified: true,\n    sessionToken: data.sessionToken || null,\n    wa_id: data.wa_id\n  }\n};"
+      },
+      "id": "code-check-verified",
+      "name": "Check Verified",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{ "node": "Parse Request", "type": "main", "index": 0 }]]
+    },
+    "Parse Request": {
+      "main": [[{ "node": "Find Code", "type": "main", "index": 0 }]]
+    },
+    "Find Code": {
+      "main": [[{ "node": "Get Status", "type": "main", "index": 0 }]]
+    },
+    "Get Status": {
+      "main": [[{ "node": "Check Verified", "type": "main", "index": 0 }]]
+    },
+    "Check Verified": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

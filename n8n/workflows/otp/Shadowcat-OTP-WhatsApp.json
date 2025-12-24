@@ -1,0 +1,199 @@
+{
+  "name": "Shadowcat-OTP-WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-otp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-wa",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer mensaje de webhook de Meta\nconst body = $input.item.json.body || $input.item.json;\n\n// Verificación inicial de Meta (hub.challenge)\nif (body['hub.mode'] === 'subscribe') {\n  return { json: { isVerify: true, challenge: body['hub.challenge'] } };\n}\n\n// Extraer mensaje\nconst messages = body?.entry?.[0]?.changes?.[0]?.value?.messages || [];\nif (messages.length === 0) {\n  return { json: { ok: false, error: 'NO_MESSAGE' } };\n}\n\nconst msg = messages[0];\nconst from = msg.from; // número del usuario\nconst text = (msg.text?.body || '').trim();\n\nif (!text) {\n  return { json: { ok: false, error: 'EMPTY_MESSAGE', from } };\n}\n\n// Detectar tipo: TELÉFONO o CÓDIGO\n// Teléfono: +52XXXXXXXXXX o 10 dígitos\nconst phoneMatch = text.match(/^\\+?\\d{10,15}$/);\nconst codeMatch = text.match(/^[A-Z0-9]{6}$/i);\n\nif (phoneMatch) {\n  // Es un TELÉFONO - generar código\n  let phone = text.replace(/[\\s\\-()]/g, '');\n  if (!phone.startsWith('+')) phone = '+52' + phone;\n  \n  function makeCode() {\n    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';\n    let code = '';\n    for (let i = 0; i < 6; i++) {\n      code += chars.charAt(Math.floor(Math.random() * chars.length));\n    }\n    return code;\n  }\n  \n  const code = makeCode();\n  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();\n  \n  return {\n    json: {\n      type: 'PHONE',\n      from,\n      phone,\n      code,\n      expiresAt,\n      redis_key: `verify:${code}`,\n      response_text: `Tu código de verificación es ${code}. Vence en 5 minutos.`\n    }\n  };\n} else if (codeMatch) {\n  // Es un CÓDIGO - validar\n  const code = text.toUpperCase();\n  \n  return {\n    json: {\n      type: 'CODE',\n      from,\n      code,\n      redis_key: `verify:${code}`\n    }\n  };\n} else {\n  // Mensaje no reconocido\n  return {\n    json: {\n      type: 'UNKNOWN',\n      from,\n      response_text: 'Envía tu número de teléfono (10 dígitos) para recibir tu código de verificación.'\n    }\n  };\n}"
+      },
+      "id": "code-parse",
+      "name": "Parse Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.type }}",
+              "value2": "PHONE"
+            }
+          ]
+        }
+      },
+      "id": "switch-type",
+      "name": "Route by Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $json.redis_key }}",
+        "value": "={{ JSON.stringify({ phone: $json.phone, from: $json.from, attempts: 0, createdAt: new Date().toISOString() }) }}",
+        "expire": true,
+        "ttl": 300
+      },
+      "id": "redis-save-code",
+      "name": "Save Code",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [900, 180],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "={{ $json.redis_key }}"
+      },
+      "id": "redis-get-code",
+      "name": "Get Code",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const redisValue = $input.item.json.value;\nconst inputData = $('Parse Message').item.json;\n\nif (!redisValue) {\n  return {\n    json: {\n      ok: false,\n      from: inputData.from,\n      response_text: 'El código no es válido o expiró. Envía tu número para generar uno nuevo.'\n    }\n  };\n}\n\nlet data;\ntry {\n  data = JSON.parse(redisValue);\n} catch (e) {\n  return {\n    json: {\n      ok: false,\n      from: inputData.from,\n      response_text: 'Error al validar el código. Intenta de nuevo.'\n    }\n  };\n}\n\n// Validar intentos\nif (data.attempts >= 3) {\n  return {\n    json: {\n      ok: false,\n      from: inputData.from,\n      response_text: 'Demasiados intentos. Genera un nuevo código enviando tu número.'\n    }\n  };\n}\n\n// Generar sessionToken\nfunction makeSessionToken() {\n  const uuid = globalThis.crypto.randomUUID();\n  return `session_${uuid.replace(/-/g, '')}`;\n}\n\nconst sessionToken = makeSessionToken();\n\nreturn {\n  json: {\n    ok: true,\n    from: inputData.from,\n    phone: data.phone,\n    sessionToken,\n    session_key: `session:${sessionToken}`,\n    response_text: 'Verificación exitosa. Ya puedes continuar en la web.'\n  }\n};"
+      },
+      "id": "code-validate",
+      "name": "Validate Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ok }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-valid",
+      "name": "If Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $json.session_key }}",
+        "value": "={{ JSON.stringify({ phone: $json.phone, createdAt: new Date().toISOString() }) }}",
+        "expire": true,
+        "ttl": 86400
+      },
+      "id": "redis-save-session",
+      "name": "Save Session",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1560, 240],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendText",
+        "senderPhoneNumberId": "1337567457956548",
+        "recipientPhoneNumber": "={{ $json.from }}",
+        "message": "={{ $json.response_text }}"
+      },
+      "id": "wa-send",
+      "name": "Send WhatsApp",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [1780, 300],
+      "credentials": {
+        "whatsAppApi": {
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $('Parse Message').item.json.challenge || 'OK' }}",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [[{ "node": "Parse Message", "type": "main", "index": 0 }]]
+    },
+    "Parse Message": {
+      "main": [[{ "node": "Route by Type", "type": "main", "index": 0 }]]
+    },
+    "Route by Type": {
+      "main": [
+        [{ "node": "Save Code", "type": "main", "index": 0 }],
+        [{ "node": "Get Code", "type": "main", "index": 0 }],
+        [{ "node": "Send WhatsApp", "type": "main", "index": 0 }]
+      ]
+    },
+    "Save Code": {
+      "main": [[{ "node": "Send WhatsApp", "type": "main", "index": 0 }]]
+    },
+    "Get Code": {
+      "main": [[{ "node": "Validate Code", "type": "main", "index": 0 }]]
+    },
+    "Validate Code": {
+      "main": [[{ "node": "If Valid", "type": "main", "index": 0 }]]
+    },
+    "If Valid": {
+      "main": [
+        [{ "node": "Save Session", "type": "main", "index": 0 }],
+        [{ "node": "Send WhatsApp", "type": "main", "index": 0 }]
+      ]
+    },
+    "Save Session": {
+      "main": [[{ "node": "Send WhatsApp", "type": "main", "index": 0 }]]
+    },
+    "Send WhatsApp": {
+      "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

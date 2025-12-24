@@ -136,6 +136,23 @@ class Settings(BaseSettings):
         validation_alias="AUTH_INSECURE_DEV_BYPASS",
     )
 
+    # Auth (FastAPI-issued JWT access tokens)
+    auth_jwt_secret: str = Field(
+        default="demo-jwt-secret-for-development-only",
+        description="Secret used to sign FastAPI-issued JWT access tokens (NOT Supabase Auth).",
+        validation_alias="AUTH_JWT_SECRET",
+    )
+    auth_jwt_algorithm: str = Field(
+        default="HS256",
+        description="JWT signing algorithm for FastAPI-issued access tokens.",
+        validation_alias="AUTH_JWT_ALGORITHM",
+    )
+    auth_access_token_ttl_seconds: int = Field(
+        default=15 * 60,
+        description="TTL (seconds) for FastAPI-issued access tokens.",
+        validation_alias="AUTH_ACCESS_TOKEN_TTL_SECONDS",
+    )
+
     # Agent / Audit (MVP convenience)
     agent_enforce_row_ids_guard: bool = Field(
         default=True,

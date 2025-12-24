@@ -1,0 +1,231 @@
+{
+  "name": "Shadowcat-WhatsApp-Incoming",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-incoming",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-incoming",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer mensaje de webhook de Meta\nconst body = $input.item.json.body || $input.item.json;\n\n// Meta env\u00eda: { entry: [{ changes: [{ value: { messages: [{from, text: {body}}] } }] }] }\nconst messages = body?.entry?.[0]?.changes?.[0]?.value?.messages || [];\n\nif (messages.length === 0) {\n  // Webhook de verificaci\u00f3n de Meta\n  if (body['hub.mode'] === 'subscribe' && body['hub.verify_token']) {\n    return { json: { mode: 'verify', challenge: body['hub.challenge'] } };\n  }\n  return { json: { ok: false, error: 'NO_MESSAGE' } };\n}\n\nconst msg = messages[0];\nconst from = msg.from; // n\u00famero del usuario\nconst text = msg.text?.body?.trim() || '';\n\n// Extraer c\u00f3digo (6-8 caracteres alfanum\u00e9ricos)\nconst codeMatch = text.match(/\\b[A-Z0-9]{6,8}\\b/i);\n\nif (!codeMatch) {\n  return {\n    json: {\n      ok: false,\n      error: 'NO_CODE',\n      from,\n      shouldRespond: true,\n      responseText: 'No detect\u00e9 ning\u00fan c\u00f3digo. Env\u00edame el c\u00f3digo de 6 d\u00edgitos que ves en la web.'\n    }\n  };\n}\n\nconst code = codeMatch[0].toUpperCase();\n\nreturn {\n  json: {\n    ok: true,\n    from,\n    code,\n    redis_key: `verify:${code}`\n  }\n};"
+      },
+      "id": "code-extract",
+      "name": "Extract Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ok }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-code",
+      "name": "If Code Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "={{ $json.redis_key }}"
+      },
+      "id": "redis-get",
+      "name": "Get Code from Redis",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [900, 240],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const redisValue = $input.item.json.value;\n\nif (!redisValue) {\n  return {\n    json: {\n      ok: false,\n      error: 'CODE_INVALID',\n      from: $('Extract Code').item.json.from,\n      shouldRespond: true,\n      responseText: 'El c\u00f3digo no es v\u00e1lido o expir\u00f3. Genera uno nuevo en la web.'\n    }\n  };\n}\n\nlet data;\ntry {\n  data = JSON.parse(redisValue);\n} catch (e) {\n  data = { wa_id: redisValue };\n}\n\n// Validar que el c\u00f3digo no est\u00e9 ya verificado\nif (data.verified === true) {\n  return {\n    json: {\n      ok: false,\n      error: 'CODE_ALREADY_USED',\n      from: $('Extract Code').item.json.from,\n      shouldRespond: true,\n      responseText: 'Este c\u00f3digo ya fue usado. Genera uno nuevo si lo necesitas.'\n    }\n  };\n}\n\nconst from = $('Extract Code').item.json.from;\n\n// Generar sessionToken\nfunction makeSessionToken() {\n  const uuid = globalThis.crypto.randomUUID();\n  return `session_${uuid.replace(/-/g, '')}`;\n}\n\nconst sessionToken = makeSessionToken();\n\nreturn {\n  json: {\n    ok: true,\n    wa_id: data.wa_id,\n    from,\n    code: $('Extract Code').item.json.code,\n    sessionToken,\n    session_key: `session:${sessionToken}`,\n    verify_key: $('Extract Code').item.json.redis_key\n  }\n};"
+      },
+      "id": "code-validate",
+      "name": "Validate Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ok }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-valid",
+      "name": "If Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 240]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $json.verify_key }}",
+        "value": "={{ JSON.stringify({ wa_id: $json.wa_id, verified: true, verifiedAt: new Date().toISOString(), sessionToken: $json.sessionToken }) }}",
+        "expire": true,
+        "ttl": 300
+      },
+      "id": "redis-mark-verified",
+      "name": "Mark Verified",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1560, 180],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $json.session_key }}",
+        "value": "={{ JSON.stringify({ wa_id: $json.wa_id, createdAt: new Date().toISOString() }) }}",
+        "expire": true,
+        "ttl": 86400
+      },
+      "id": "redis-save-session",
+      "name": "Save Session",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1780, 180],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendText",
+        "senderPhoneNumberId": "1337567457956548",
+        "recipientPhoneNumber": "={{ $('Validate Code').item.json.from }}",
+        "message": "Verificación exitosa. Ya puedes continuar en la web."
+      },
+      "id": "whatsapp-success",
+      "name": "Send Success",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [2000, 180],
+      "credentials": {
+        "whatsAppApi": {
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendText",
+        "senderPhoneNumberId": "1337567457956548",
+        "recipientPhoneNumber": "={{ $json.from }}",
+        "message": "={{ $json.responseText }}"
+      },
+      "id": "whatsapp-error",
+      "name": "Send Error",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [1560, 360],
+      "credentials": {
+        "whatsAppApi": {
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2220, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $('WhatsApp Webhook').item.json.body?.['hub.challenge'] || 'OK' }}",
+        "options": {}
+      },
+      "id": "respond-no-msg",
+      "name": "Respond NoMsg",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [[{ "node": "Extract Code", "type": "main", "index": 0 }]]
+    },
+    "Extract Code": {
+      "main": [[{ "node": "If Code Found", "type": "main", "index": 0 }]]
+    },
+    "If Code Found": {
+      "main": [
+        [{ "node": "Get Code from Redis", "type": "main", "index": 0 }],
+        [{ "node": "Respond NoMsg", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Code from Redis": {
+      "main": [[{ "node": "Validate Code", "type": "main", "index": 0 }]]
+    },
+    "Validate Code": {
+      "main": [[{ "node": "If Valid", "type": "main", "index": 0 }]]
+    },
+    "If Valid": {
+      "main": [
+        [{ "node": "Mark Verified", "type": "main", "index": 0 }],
+        [{ "node": "Send Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark Verified": {
+      "main": [[{ "node": "Save Session", "type": "main", "index": 0 }]]
+    },
+    "Save Session": {
+      "main": [[{ "node": "Send Success", "type": "main", "index": 0 }]]
+    },
+    "Send Success": {
+      "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]]
+    },
+    "Send Error": {
+      "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

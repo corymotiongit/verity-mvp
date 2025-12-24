@@ -1,0 +1,350 @@
+{
+  "name": "Shadowcat-OTP-Validate",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shadowcat-otp-validate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-validate",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "shadowcat-otp-validate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $input.item.json || {};\n\nfunction toObj(value) {\n  if (!value) return null;\n  if (typeof value === 'object') return value;\n  if (typeof value === 'string') {\n    const s = value.trim();\n    if (!s) return null;\n    if (s.startsWith('{') || s.startsWith('[')) {\n      try { return JSON.parse(s); } catch (e) { return null; }\n    }\n  }\n  return null;\n}\n\nconst candidates = [\n  toObj(incoming.body),\n  toObj(incoming),\n  toObj(incoming.query),\n  toObj(incoming.params),\n].filter(Boolean);\n\nfunction pickFirst(keyList) {\n  for (const obj of candidates) {\n    for (const k of keyList) {\n      if (obj && typeof obj[k] !== 'undefined' && obj[k] !== null) {\n        const v = obj[k].toString().trim();\n        if (v) return v;\n      }\n    }\n  }\n  return '';\n}\n\nconst wa_id = pickFirst(['wa_id', 'userId', 'user_id']);\nconst otp = pickFirst(['otp']);\n\nif (!wa_id || !otp) {\n  return { json: { ok: false, error_code: 'OTP_INVALID', wa_id } };\n}\n\nreturn {\n  json: {\n    ok: true,\n    wa_id,\n    otp,\n    otp_key: `otp:${wa_id}`\n  }\n};"
+      },
+      "id": "code-extract",
+      "name": "Extract Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ok }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-precheck",
+      "name": "If Request Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "={{ String($json.otp_key || ('otp:' + ($json.wa_id || $json.userId || ''))) }}"
+      },
+      "id": "redis-get",
+      "name": "Get OTP from Redis",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [648, -120],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $node['Extract Request'].json;\nconst wa_id = req.wa_id;\nconst providedOtp = req.otp;\nconst otpKey = req.otp_key;\n\nfunction unwrapRedisValue(v) {\n  if (!v) return null;\n  if (typeof v === 'string') return v;\n  if (typeof v !== 'object') return v;\n\n  const obj = v;\n  const preferredKeys = ['value', 'data', 'result', 'propertyName'];\n  for (const k of preferredKeys) {\n    if (Object.prototype.hasOwnProperty.call(obj, k) && obj[k] != null) {\n      return obj[k];\n    }\n  }\n\n  const keys = Object.keys(obj);\n  if (keys.length === 1) {\n    return obj[keys[0]];\n  }\n\n  return obj;\n}\n\nlet raw = $input.item.json;\nraw = unwrapRedisValue(raw);\n\nif (!raw) {\n  return { json: { ok: false, error_code: 'OTP_EXPIRED', wa_id, otp_key: otpKey } };\n}\n\nlet rawText = raw;\nif (typeof rawText !== 'string') {\n  try { rawText = JSON.stringify(rawText); } catch (e) { rawText = ''; }\n}\nrawText = (rawText || '').toString().trim();\nif (!rawText) {\n  return { json: { ok: false, error_code: 'OTP_EXPIRED', wa_id, otp_key: otpKey } };\n}\n\nlet stored;\ntry {\n  stored = JSON.parse(rawText);\n} catch (e) {\n  return { json: { ok: false, error_code: 'OTP_INVALID', wa_id, otp_key: otpKey } };\n}\n\nif (!stored || typeof stored !== 'object') {\n  return { json: { ok: false, error_code: 'OTP_INVALID', wa_id, otp_key: otpKey } };\n}\n\nconst storedOtp = (stored.otp ?? '').toString();\nconst attempts = Number(stored.attempts ?? 0) || 0;\nconst phone_number = typeof stored.phone_number === 'string' ? stored.phone_number : undefined;\n\nconst maxAttempts = 5;\nif (attempts >= maxAttempts) {\n  return { json: { ok: false, error_code: 'OTP_RATE_LIMITED', wa_id, otp_key: otpKey } };\n}\n\nif (providedOtp !== storedOtp) {\n  const nextAttempts = attempts + 1;\n  const error_code = nextAttempts >= maxAttempts ? 'OTP_RATE_LIMITED' : 'OTP_INVALID';\n\n  return {\n    json: {\n      ok: false,\n      error_code,\n      wa_id,\n      otp_key: otpKey,\n      write_back: true,\n      otp_value: JSON.stringify({ ...stored, attempts: nextAttempts }),\n      phone_number\n    }\n  };\n}\n\nfunction makeSessionToken() {\n  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {\n    return (\n      globalThis.crypto.randomUUID().replace(/-/g, '') +\n      globalThis.crypto.randomUUID().replace(/-/g, '')\n    );\n  }\n  return (\n    Date.now().toString(16) +\n    Math.random().toString(16).slice(2) +\n    Math.random().toString(16).slice(2)\n  );\n}\n\nconst sessionToken = makeSessionToken();\nconst expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();\n\nreturn {\n  json: {\n    ok: true,\n    wa_id,\n    phone_number,\n    otp_key: otpKey,\n    delete_otp: true,\n    sessionToken,\n    expiresAt\n  }\n};"
+      },
+      "id": "code-validate",
+      "name": "Validate OTP Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ok }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-ok",
+      "name": "If OTP OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1088, -120]
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "key": "={{ String($json.otp_key || ('otp:' + ($json.wa_id || $json.userId || ''))) }}"
+      },
+      "id": "redis-del",
+      "name": "Delete OTP",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1296, -240],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "=session:{{ $json.sessionToken }}",
+        "value": "={{ JSON.stringify({ wa_id: $json.wa_id, phone_number: $json.phone_number, createdAt: new Date().toISOString() }) }}",
+        "expire": true,
+        "ttl": 86400
+      },
+      "id": "redis-session",
+      "name": "Save Session to Redis",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1296, -120],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, wa_id: $json.wa_id, phone_number: $json.phone_number, sessionToken: $json.sessionToken, expiresAt: $json.expiresAt } }}",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1520, -120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.write_back }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-writeback",
+      "name": "If Write Back Attempts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1296, 40]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ String($json.otp_key || ('otp:' + ($json.wa_id || $json.userId || ''))) }}",
+        "value": "={{ $json.otp_value }}",
+        "expire": true,
+        "ttl": 300
+      },
+      "id": "redis-set-attempts",
+      "name": "Update OTP Attempts",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1520, 40],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, error_code: $json.error_code || 'OTP_INVALID' } }}",
+        "options": {}
+      },
+      "id": "respond-fail",
+      "name": "Respond Fail",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1520, 160]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, error_code: $json.error_code || 'OTP_INVALID' } }}",
+        "options": {}
+      },
+      "id": "respond-badreq",
+      "name": "Respond Bad Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [648, 140]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Request": {
+      "main": [
+        [
+          {
+            "node": "If Request Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Request Valid": {
+      "main": [
+        [
+          {
+            "node": "Get OTP from Redis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Bad Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get OTP from Redis": {
+      "main": [
+        [
+          {
+            "node": "Validate OTP Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate OTP Code": {
+      "main": [
+        [
+          {
+            "node": "If OTP OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If OTP OK": {
+      "main": [
+        [
+          {
+            "node": "Delete OTP",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Session to Redis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Write Back Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete OTP": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Session to Redis": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Write Back Attempts": {
+      "main": [
+        [
+          {
+            "node": "Update OTP Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update OTP Attempts": {
+      "main": [
+        [
+          {
+            "node": "Respond Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "21896f34-ef36-4623-ae01-e3f83ee7b091",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "df36310272de2c9759ca05632d1f2f1aef27df405db54992558caf07d3defac7"
+  },
+  "id": "PbhI1zxG7RFTEcZt",
+  "tags": []
+}

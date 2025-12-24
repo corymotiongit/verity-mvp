@@ -400,19 +400,104 @@ export interface OtpValidateResponse {
   error?: string;
 }
 
+const N8N_OTP_BASE = (import.meta.env.VITE_N8N_OTP_URL || 'https://shadowcat.cloud/webhook')
+  .trim()
+  .replace(/\/+$/, '');
+
 export const otpApi = {
-  request: (userId: string, phone: string): Promise<OtpRequestResponse> => {
-    return apiFetch('/otp/request', {
-      method: 'POST',
-      body: JSON.stringify({ userId, phone }),
-    });
+  request: async (userId: string, phone: string): Promise<OtpRequestResponse> => {
+    try {
+      const res = await fetch(`${N8N_OTP_BASE}/shadowcat-otp-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wa_id: userId, phone_number: phone }),
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        return { ok: false, error: errData?.error_code || 'OTP_REQUEST_FAILED' };
+      }
+      
+      let data = await res.json();
+      
+      // n8n puede devolver array [{}] en vez de objeto {}
+      if (Array.isArray(data) && data.length > 0) {
+        data = data[0];
+      }
+      
+      return {
+        ok: data.ok ?? data.success ?? true,
+        userId: data.wa_id || data.userId || userId,
+        debugOtp: data.verifyCode, // código para enviar por WhatsApp
+      };
+    } catch (err: any) {
+      return { ok: false, error: err.message || 'NETWORK_ERROR' };
+    }
   },
 
-  validate: (userId: string, otp: string): Promise<OtpValidateResponse> => {
-    return apiFetch('/otp/validate', {
-      method: 'POST',
-      body: JSON.stringify({ userId, otp }),
-    });
+  checkVerified: async (userId: string, verifyCode: string): Promise<{ verified: boolean; sessionToken?: string }> => {
+    try {
+      const res = await fetch(`${N8N_OTP_BASE}/shadowcat-otp-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wa_id: userId, verifyCode }),
+      });
+      
+      if (!res.ok) {
+        return { verified: false };
+      }
+      
+      let data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        data = data[0];
+      }
+      
+      return {
+        verified: data.verified === true,
+        sessionToken: data.sessionToken,
+      };
+    } catch (err: any) {
+      return { verified: false };
+    }
+  },
+
+  validate: async (userId: string, otp: string): Promise<OtpValidateResponse> => {
+    try {
+      const res = await fetch(`${N8N_OTP_BASE}/shadowcat-otp-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wa_id: userId, otp }),
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        return { ok: false, error: errData?.error_code || 'OTP_VALIDATION_FAILED' };
+      }
+      
+      let data = await res.json();
+      
+      // n8n puede devolver array [{}] en vez de objeto {}
+      if (Array.isArray(data) && data.length > 0) {
+        data = data[0];
+      }
+      
+      if (!data.ok) {
+        return { ok: false, error: data.error_code || 'OTP_INVALID' };
+      }
+      
+      // Guardar sessionToken en localStorage
+      if (data.sessionToken) {
+        localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, data.sessionToken);
+      }
+      
+      return {
+        ok: true,
+        sessionToken: data.sessionToken,
+        userId: data.wa_id || data.userId || userId,
+      };
+    } catch (err: any) {
+      return { ok: false, error: err.message || 'NETWORK_ERROR' };
+    }
   },
 };
 

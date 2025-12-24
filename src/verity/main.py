@@ -32,6 +32,9 @@ from verity.modules.tags import router as tags_router
 from verity.modules.admin import router as admin_router
 from verity.modules.otp import router as otp_router
 
+# Import v2 auth routes
+from verity.api.routes.auth_v2 import router as auth_v2_router
+
 # Import v2 API (new architecture)
 from verity.api.routes.query_v2 import router as query_v2_router
 
@@ -197,6 +200,9 @@ app.include_router(audit_router)
 app.include_router(tags_router)
 app.include_router(admin_router)
 app.include_router(otp_router)
+
+# v2 auth (OTP -> JWT)
+app.include_router(auth_v2_router)
 
 # v2 API (new architecture - tool-based)
 app.include_router(query_v2_router)

@@ -1,0 +1,157 @@
+{
+  "name": "Shadowcat-OTP-Request",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shadowcat-otp-request",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 304],
+      "webhookId": "7bc17c53-7da7-4c0b-a545-e8f49aba731f"
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $input.item.json || {};\n\nfunction toObj(value) {\n  if (!value) return null;\n  if (typeof value === 'object') return value;\n  if (typeof value === 'string') {\n    const s = value.trim();\n    if (!s) return null;\n    if (s.startsWith('{') || s.startsWith('[')) {\n      try { return JSON.parse(s); } catch (e) { return null; }\n    }\n  }\n  return null;\n}\n\nconst candidates = [\n  toObj(incoming.body),\n  toObj(incoming),\n  toObj(incoming.query),\n  toObj(incoming.params),\n].filter(Boolean);\n\nfunction pickFirst(keyList) {\n  for (const obj of candidates) {\n    for (const k of keyList) {\n      if (obj && typeof obj[k] !== 'undefined' && obj[k] !== null) {\n        const v = obj[k].toString().trim();\n        if (v) return v;\n      }\n    }\n  }\n  return '';\n}\n\nconst rawId = pickFirst(['wa_id', 'userId', 'user_id']);\nlet phone = pickFirst(['phone', 'phone_number']);\n\nphone = phone.replace(/[\\s\\-()]/g, '');\nif (phone && !phone.startsWith('+') && /^\\d+$/.test(phone)) {\n  phone = '+' + phone;\n}\n\nif (!rawId) {\n  return { json: { ok: false, success: false, error: 'WA_ID_MISSING' } };\n}\nif (!phone) {\n  return { json: { ok: false, success: false, error: 'PHONE_INVALID', wa_id: rawId } };\n}\n\n// Generar código de verificación (6 caracteres alfanuméricos)\nfunction makeCode() {\n  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin O, 0, I, 1\n  let code = '';\n  for (let i = 0; i < 6; i++) {\n    code += chars.charAt(Math.floor(Math.random() * chars.length));\n  }\n  return code;\n}\n\nconst verifyCode = makeCode();\nconst expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();\n\nreturn {\n  json: {\n    ok: true,\n    success: true,\n    wa_id: rawId,\n    phone_number: phone,\n    verifyCode,\n    expiresAt,\n    verified: false,\n    redis_key: `verify:${verifyCode}`\n  }\n};"
+      },
+      "id": "code-1",
+      "name": "Generate OTP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [464, 304]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ok }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-1",
+      "name": "If OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [656, 304]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $json.redis_key }}",
+        "value": "={{ JSON.stringify({ wa_id: $json.wa_id, phone_number: $json.phone_number, verified: false, createdAt: new Date().toISOString() }) }}",
+        "expire": true,
+        "ttl": 300
+      },
+      "id": "redis-1",
+      "name": "Save OTP to Redis",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [880, 240],
+      "credentials": {
+        "redis": {
+          "id": "j0YrhkRd9jdayYs0",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, ok: true, message: 'Código generado', wa_id: $json.wa_id, phone_number: $json.phone_number, verifyCode: $('Generate OTP').item.json.verifyCode } }}",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 240]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, ok: false, error: $json.error || 'OTP_REQUEST_FAILED', wa_id: $json.wa_id } }}",
+        "options": {}
+      },
+      "id": "respond-fail",
+      "name": "Respond Fail",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [880, 400]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Generate OTP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate OTP": {
+      "main": [
+        [
+          {
+            "node": "If OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If OK": {
+      "main": [
+        [
+          {
+            "node": "Save OTP to Redis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save OTP to Redis": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond OK": {
+      "main": []
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "890796c0-3073-4f61-9b2c-91c42e105b8f",
+  "meta": {
+    "instanceId": "df36310272de2c9759ca05632d1f2f1aef27df405db54992558caf07d3defac7"
+  },
+  "id": "W2zwPQeDNv3LpuLc",
+  "tags": []
+}
