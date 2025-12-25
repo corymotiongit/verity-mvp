@@ -1,46 +1,24 @@
 #!/usr/bin/env python3
-"""
-Test Suite: Legacy Isolation Verification
+"""scripts/test_legacy_isolation.py
 
-Verifica que el código legacy esté completamente aislado y no pueda ser
-usado accidentalmente desde el código activo.
+Legacy removal verification.
+
+Antes, este repo congelaba agentes legacy en `legacy_frozen/` con guard clauses.
+Ahora el objetivo es más simple: confirmar que legacy ya no existe en el repo,
+que no hay fugas en `src/`, y que el server arranca sin depender de legacy.
 """
 import sys
 import subprocess
 import os
 
-def test_guard_clauses():
-    """Test que los guard clauses previenen imports"""
-    print("\n🔒 Testing guard clauses...")
-    
-    test_code = """
-import sys
-sys.path.append('legacy_frozen')
-try:
-    from doc_qa_agent import DocQAAgent
-    print("FAIL: Import succeeded")
-    sys.exit(1)
-except RuntimeError as e:
-    if "LEGACY CODE IS FROZEN" in str(e):
-        print("PASS: Guard clause working")
-        sys.exit(0)
-    else:
-        print(f"FAIL: Wrong error: {e}")
-        sys.exit(1)
-"""
-    
-    result = subprocess.run(
-        [sys.executable, "-c", test_code],
-        capture_output=True,
-        text=True
-    )
-    
-    if result.returncode == 0:
-        print("   ✅ Guard clauses OK")
-        return True
-    else:
-        print(f"   ❌ Guard clause test failed: {result.stdout} {result.stderr}")
+def test_legacy_removed():
+    """Test que legacy_frozen/ ya no existe"""
+    print("\n📁 Checking legacy removal...")
+    if os.path.exists("legacy_frozen"):
+        print("   ❌ legacy_frozen/ still exists")
         return False
+    print("   ✅ legacy_frozen/ is removed")
+    return True
 
 def test_no_leaks():
     """Test que no hay fugas de legacy en src/"""
@@ -85,37 +63,13 @@ def test_server_starts():
         print(f"   ❌ Server failed to start:\n{stderr}")
         return False
 
-def test_legacy_dir_outside_src():
-    """Test que legacy_frozen está fuera de src/"""
-    print("\n📁 Checking legacy directory location...")
-    
-    if os.path.exists("legacy_frozen") and not os.path.exists("src/verity/modules/_legacy"):
-        print("   ✅ Legacy correctly isolated outside src/")
-        return True
-    else:
-        print("   ❌ Legacy directory structure incorrect")
-        return False
-
-def test_no_pycache_in_legacy():
-    """Test que no hay __pycache__ en legacy_frozen"""
-    print("\n🗑️  Checking for __pycache__ in legacy...")
-    
-    if os.path.exists("legacy_frozen/__pycache__"):
-        print("   ❌ __pycache__ found in legacy_frozen/")
-        return False
-    else:
-        print("   ✅ No __pycache__ in legacy_frozen/")
-        return True
-
 if __name__ == "__main__":
     print("=" * 60)
     print("🧪 LEGACY ISOLATION TEST SUITE")
     print("=" * 60)
     
     tests = [
-        test_legacy_dir_outside_src,
-        test_no_pycache_in_legacy,
-        test_guard_clauses,
+        test_legacy_removed,
         test_no_leaks,
         test_server_starts,
     ]

@@ -1,10 +1,12 @@
-import sys
-sys.path.append('legacy_frozen')
+"""Legacy guard-clause smoke test.
 
-try:
-    from doc_qa_agent import DocQAAgent
-    print("❌ ERROR: Legacy import succeeded - guard clause failed!")
-except RuntimeError as e:
-    print(f"✅ SUCCESS: Guard clause working - {e}")
-except Exception as e:
-    print(f"⚠️  Unexpected error: {e}")
+Legacy used to be frozen in `legacy_frozen/` with modules that raise on import.
+That directory has now been removed. This script simply verifies it is absent.
+"""
+
+import os
+
+if os.path.exists("legacy_frozen"):
+    raise SystemExit("❌ legacy_frozen/ still exists")
+
+print("✅ legacy_frozen/ is removed")

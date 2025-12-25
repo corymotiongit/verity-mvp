@@ -1,19 +1,13 @@
-# ✅ Checklist de Aislamiento Legacy - COMPLETADO
+# ✅ Checklist de Remoción Legacy
 
-## 1️⃣ Legacy fuera de src/ ✅
+## 1️⃣ Legacy eliminado ✅
 
 ```
-❌ src/verity/modules/_legacy/
-✅ legacy_frozen/
+✅ legacy_frozen/ (eliminado)
+✅ sin directorios legacy dentro de src/
 ```
 
-**Archivos aislados:**
-- `doc_qa_agent.py` - Guard clause OK
-- `code_generator_agent.py` - Guard clause OK
-- `chart_agent.py` - Guard clause OK
-- `forecast_agent.py` - Guard clause OK
-
-**Sin `__init__.py`:** ✅ Python no puede importar estos módulos
+**Estado:** el código legacy ya no vive en el repo.
 
 ## 2️⃣ Ningún import desde core/api a legacy ✅
 
@@ -29,22 +23,10 @@ DocQAAgent: Solo en comentarios y legacy_frozen/
 - `engine.py`: `code_generator = None`, `chart_agent = None`
 - `service.py`: `doc_qa = None`, forecast bloqueado con `if False`
 
-## 3️⃣ Guard clauses obligatorias ✅
+## 3️⃣ Guard clauses (obsoleto) ✅
 
-Cada archivo legacy tiene al inicio:
-
-```python
-raise RuntimeError(
-    "LEGACY CODE IS FROZEN - This file has been moved to legacy_frozen/ and must not be imported. "
-    "Use [alternative] instead. See /src/verity/core/ for new implementation."
-)
-```
-
-**Prueba:**
-```python
-from doc_qa_agent import DocQAAgent
-# ✅ RuntimeError: LEGACY CODE IS FROZEN...
-```
+Antes se usaban guard clauses para prevenir imports accidentales.
+Como `legacy_frozen/` ya no existe, este mecanismo ya no aplica.
 
 ## 4️⃣ Router: un solo entrypoint ✅
 
@@ -71,7 +53,7 @@ Todos los prompts legacy están en `legacy_frozen/`:
 
 ### ¿Puedes borrar `legacy_frozen/` completo?
 
-**Respuesta:** ✅ SÍ
+**Respuesta:** ✅ Ya se borró
 
 - El servidor sigue funcionando ✅
 - Ningún endpoint cambia ✅
@@ -84,7 +66,7 @@ Todos los prompts legacy están en `legacy_frozen/`:
 ✅ Servidor corriendo en http://127.0.0.1:8000
 ✅ Health endpoint: GET /api/v2/health (200 OK)
 ⏳ Query endpoint: POST /api/v2/query (requiere GEMINI_API_KEY)
-✅ Legacy completamente aislado
+✅ Legacy removido
 ✅ Sin dependencias circulares
 ✅ Arquitectura limpia: core/ + tools/ + api/
 ```
@@ -95,13 +77,13 @@ Todos los prompts legacy están en `legacy_frozen/`:
 2. **Probar `/api/v2/query` con preguntas reales**
 3. **Migrar progresivamente rutas de `/agent/chat` a `/api/v2/query`**
 4. **Deprecar `AgentService` cuando v2 esté completo**
-5. **OPCIONAL: Borrar `legacy_frozen/` cuando no se necesite referencia**
+5. **Hecho: Borrar `legacy_frozen/`**
 
 ## 🔒 Garantías de aislamiento:
 
 - ❌ Imposible importar código legacy desde src/
 - ❌ Imposible ejecutar código legacy accidentalmente
-- ✅ Legacy preservado para referencia histórica
+- ✅ Legacy removido para reducir superficie y confusión
 - ✅ Nueva arquitectura independiente y limpia
 - ✅ Migración incremental posible (ambos endpoints coexisten)
 
