@@ -54,7 +54,8 @@ async def lifespan(app: FastAPI):
     logger.info(
         f"Starting Verity API v{__version__} "
         f"[env={settings.app_env}] "
-        f"[features={settings.features.to_dict()}]"
+        f"[features={settings.features.to_dict()}] "
+        f"[legacy_compat={'on' if settings.legacy_compat_enabled else 'off'}]"
     )
     yield
     logger.info("Shutting down Verity API")
@@ -109,6 +110,27 @@ async def log_requests(request: Request, call_next):
     logger.info(f"[{request_id}] {request.method} {request.url.path} -> {response.status_code}")
 
     return response
+
+
+@app.middleware("http")
+async def legacy_compat_guard(request: Request, call_next):
+    """Return a controlled response when legacy compatibility is disabled."""
+    settings = get_settings()
+
+    if not settings.legacy_compat_enabled:
+        path = request.url.path
+        if path.startswith("/agent") or path.startswith("/otp"):
+            return JSONResponse(
+                status_code=410,
+                content={
+                    "error": {
+                        "code": "LEGACY_DISABLED",
+                        "message": "Legacy endpoints are disabled. Use /api/v2/* instead.",
+                    }
+                },
+            )
+
+    return await call_next(request)
 
 
 # =============================================================================

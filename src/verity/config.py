@@ -129,6 +129,13 @@ class Settings(BaseSettings):
     app_debug: bool = False
     app_log_level: str = "INFO"
 
+    # Legacy compatibility (old endpoints)
+    legacy_compat_enabled: bool = Field(
+        default=True,
+        description="If false, legacy endpoints (e.g. /agent/*, /otp/*) are disabled and return 410.",
+        validation_alias="LEGACY_COMPAT_ENABLED",
+    )
+
     # Auth (MVP / local convenience)
     auth_insecure_dev_bypass: bool = Field(
         default=False,
