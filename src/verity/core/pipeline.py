@@ -53,13 +53,14 @@ class VerityPipeline:
         self,
         agent_policy: AgentPolicy,
         tool_registry: ToolRegistry,
-        checkpoint_storage: CheckpointStorage
+        checkpoint_storage: CheckpointStorage,
+        intent_resolver: IntentResolver | None = None
     ):
         self.agent_policy = agent_policy
         self.tool_registry = tool_registry
         self.checkpoint_logger = CheckpointLogger(checkpoint_storage)
         self.tool_executor = ToolExecutor()
-        self.intent_resolver = IntentResolver()
+        self.intent_resolver = intent_resolver or IntentResolver()
         self.response_composer = ResponseComposer()
         self.schema_validator = SchemaValidator()
     

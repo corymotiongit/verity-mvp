@@ -4,6 +4,15 @@ from verity.tools.run_table_query import RunTableQueryTool
 from verity.exceptions import EmptyResultException, InvalidFilterException, TypeMismatchException
 
 
+@pytest.fixture(autouse=True)
+def clear_query_cache():
+    """Limpia cache de queries antes de cada test para evitar flakiness."""
+    from verity.tools import run_table_query as rtq
+    rtq._QUERY_CACHE.clear()
+    yield
+    rtq._QUERY_CACHE.clear()
+
+
 @pytest.mark.asyncio
 async def test_run_table_query_total_revenue_with_delivered_filter(tmp_path, monkeypatch):
     # run_table_query busca uploads/canonical relativo al cwd
@@ -111,7 +120,6 @@ async def test_run_table_query_invalid_filter_operator_is_typed(tmp_path, monkey
     assert exc.value.code == "INVALID_FILTER"
 
 
-@pytest.mark.skip(reason="TypeMismatchException not implemented in run_table_query - pandas coerces invalid types to NaN")
 @pytest.mark.asyncio
 async def test_run_table_query_type_mismatch_non_numeric_sum(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)

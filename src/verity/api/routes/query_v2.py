@@ -72,11 +72,21 @@ _PIPELINE: VerityPipeline | None = None
 
 
 # Inicializar componentes del pipeline
-def get_pipeline() -> VerityPipeline:
-    """Factory para crear pipeline configurado."""
+def get_pipeline(intent_resolver=None) -> VerityPipeline:
+    """Factory para crear pipeline configurado.
+    
+    Args:
+        intent_resolver: IntentResolver opcional para inyección de dependencias (útil para tests).
+                         Si es None, recarga del singleton o crea uno nuevo.
+    """
+    from verity.core.intent_resolver import IntentResolver
 
     global _PIPELINE
-    if _PIPELINE is not None:
+    
+    # Si se pasa un intent_resolver, forzamos recreación del pipeline
+    if intent_resolver is not None:
+        pass  # No usamos cache
+    elif _PIPELINE is not None:
         return _PIPELINE
     
     # Configurar agente policy
@@ -106,11 +116,12 @@ def get_pipeline() -> VerityPipeline:
     # Configurar checkpoint storage (persistente in-process)
     checkpoint_storage = _CHECKPOINT_STORAGE
     
-    # Crear pipeline
+    # Crear pipeline con IntentResolver inyectado o default
     pipeline = VerityPipeline(
         agent_policy=agent_policy,
         tool_registry=tool_registry,
-        checkpoint_storage=checkpoint_storage
+        checkpoint_storage=checkpoint_storage,
+        intent_resolver=intent_resolver
     )
     
     # Registrar handlers locales para tools
