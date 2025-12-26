@@ -66,6 +66,12 @@ class ResolveSemanticsTool(BaseTool):
         available_tables = input_data["available_tables"]
         intent = (input_data.get("intent") or "").strip().lower()
 
+        conversation_context = input_data.get("conversation_context") if isinstance(input_data, dict) else None
+        if not isinstance(conversation_context, dict):
+            conversation_context = {}
+        last_metric = conversation_context.get("last_metric") if isinstance(conversation_context.get("last_metric"), str) else None
+        last_table = conversation_context.get("last_table") if isinstance(conversation_context.get("last_table"), str) else None
+
         # Cargar Data Dictionary v1 (authoritative)
         dd = DataDictionary()
 
@@ -98,6 +104,19 @@ class ResolveSemanticsTool(BaseTool):
         # Generar frases candidatas (determinístico, sin NLP creativo)
         phrases = self._candidate_phrases(question)
 
+        def _looks_like_followup(q: str) -> bool:
+            qn = self._normalize_text(q)
+            # Heurística conservadora: follow-ups cortos o con conectores típicos
+            if len(qn) <= 14:
+                return True
+            if qn.startswith("y "):
+                return True
+            if any(t in qn for t in ["lo mismo", "igual", "tambien", "también", "ahora", "y ahora", "y por", "y para"]):
+                return True
+            return False
+
+        is_followup = _looks_like_followup(question)
+
         # Agregar por métrica el mejor score observado en cualquier frase
         metric_best: dict[str, dict[str, Any]] = {}
         for phrase in phrases:
@@ -114,11 +133,35 @@ class ResolveSemanticsTool(BaseTool):
             for matched_alias, score, _ in extracted:
                 metrics_for_alias = alias_to_metrics.get(matched_alias) or set()
                 for metric_name in metrics_for_alias:
+                    base_score = float(score)
+
+                    # Contexto conversacional leve: solo sesgo en follow-ups.
+                    boost = 0.0
+                    boost_reasons: list[str] = []
+                    if is_followup and last_metric and metric_name == last_metric:
+                        boost += 3.0
+                        boost_reasons.append("last_metric")
+                    if is_followup and last_table:
+                        try:
+                            if dd.get_metric(metric_name).table == last_table:
+                                boost += 1.5
+                                boost_reasons.append("last_table")
+                        except KeyError:
+                            pass
+
+                    # Conservador: no permitir que el boost rescate matches muy débiles.
+                    boosted_score = base_score
+                    if boost and base_score >= 70.0:
+                        boosted_score = min(100.0, base_score + boost)
+
                     existing = metric_best.get(metric_name)
-                    if existing is None or score > existing["score"]:
+                    if existing is None or boosted_score > existing["score"]:
                         metric_best[metric_name] = {
                             "metric": metric_name,
-                            "score": float(score),
+                            "score": float(boosted_score),
+                            "base_score": float(base_score),
+                            "context_boost": float(boosted_score - base_score),
+                            "context_boost_reasons": boost_reasons,
                             "matched_alias": matched_alias,
                             "matched_phrase": phrase,
                         }
@@ -161,6 +204,10 @@ class ResolveSemanticsTool(BaseTool):
             penalty += 0.05
         if top["matched_phrase"] != self._normalize_text(question):
             penalty += 0.03
+        # Penalizar supuestos implícitos (cuando usamos contexto conversacional para sesgar)
+        ctx_boost = float(top.get("context_boost", 0.0) or 0.0)
+        if ctx_boost > 0:
+            penalty += min(0.18, 0.06 + (ctx_boost / 100.0))
         confidence = max(0.0, min(1.0, confidence - penalty))
 
         matched_metrics = [
@@ -173,6 +220,9 @@ class ResolveSemanticsTool(BaseTool):
                 "format": metric_def.format,
                 "match_score": top["score"],
                 "matched_phrase": top["matched_phrase"],
+                "base_match_score": float(top.get("base_score", top["score"])),
+                "context_boost": float(top.get("context_boost", 0.0)),
+                "context_boost_reasons": top.get("context_boost_reasons", []),
             }
         ]
 

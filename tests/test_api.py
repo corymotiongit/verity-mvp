@@ -5,6 +5,7 @@ Tests for Verity API endpoints.
 import pytest
 from fastapi.testclient import TestClient
 
+from verity.config import get_settings
 from verity.main import app
 
 
@@ -12,6 +13,19 @@ from verity.main import app
 def client():
     """Create test client."""
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _force_legacy_compat(monkeypatch):
+    """These tests target legacy endpoints (e.g. /agent/*).
+
+    Force legacy compat on so expectations remain stable even if a developer
+    runs tests with LEGACY_COMPAT_ENABLED=false in their local .env.
+    """
+    monkeypatch.setenv("LEGACY_COMPAT_ENABLED", "true")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 class TestHealth:

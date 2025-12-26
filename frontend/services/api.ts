@@ -2,7 +2,7 @@
  * Verity API Client
  * 
  * Handles all communication with the FastAPI backend.
- * Auth is currently mocked - token management will be added later.
+ * Includes Bearer token support via localStorage.
  */
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8001')
@@ -10,6 +10,18 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8001')
   .replace(/\/+$/, '');
 
 const AUTH_TOKEN_STORAGE_KEY = 'verity_token';
+
+export function setAuthToken(token: string | null): void {
+  try {
+    if (!token) {
+      window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+  } catch {
+    // ignore storage errors
+  }
+}
 
 function getAuthToken(): string | null {
   try {
@@ -175,144 +187,59 @@ export const documentsApi = {
 };
 
 // =============================================================================
-// Agent API
+// v2 Auth API
 // =============================================================================
 
-export interface AgentChatRequest {
-  message: string;
-  conversation_id?: string | null;
-  context?: {
-    document_ids?: string[];
-    include_db_context?: boolean;
-    /** Filter documents by category (e.g., 'contrato', 'rrhh', 'finanzas') */
-    document_category?: string;
-    /** Filter documents by project - uses project-specific File Search store */
-    document_project?: string;
-  };
+export interface OtpValidateV2Response {
+  access_token: string;
+  token_type: 'bearer';
+  expires_in: number;
 }
 
-export interface SourceCitation {
-  type: 'document' | 'database' | 'web';
-  id: string;
-  title: string | null;
-  snippet: string | null;
-  relevance: number | null;
-}
-
-export interface ProposedChange {
-  entity_type: string;
-  entity_id: string | null;
-  action: 'create' | 'update' | 'delete';
-  changes: Record<string, any>;
-  requires_approval: boolean;
-}
-
-export interface ChatScope {
-  project: string | null;
-  tag_ids: string[];
-  category: string | null;
-  period: string | null;
-  source: string | null;
-  collection_id: string | null;
-  doc_ids: string[];
-  mode: 'filtered' | 'all_docs' | 'empty';
-}
-
-export interface ScopeSuggestion {
-  label: string;
-  action: 'upload' | 'clear_filters' | 'select_all' | 'select_project';
-  project_id?: string | null;
-}
-
-export interface ResolvedScope {
-  display_summary: string;
-  doc_count: number;
-  requires_action: boolean;
-  is_empty: boolean;
-  empty_reason?: string | null;
-  suggestion?: ScopeSuggestion | null;
-}
-
-export interface AgentChatResponse {
-  request_id: string;
-  conversation_id: string;
-  message: {
-    role: 'assistant';
-    content: string;
-  };
-  sources: SourceCitation[];
-  proposed_changes?: ProposedChange[] | null;
-  chart_spec?: { type: string; spec: Record<string, any> } | null;
-  table_preview?: Record<string, any> | null;
-  evidence_ref?: string | null;
-  scope_info?: ResolvedScope | null;
-}
-
-export interface ConversationSummary {
-  id: string;
-  title: string | null;
-  message_count: number;
-  created_at: string;
-  updated_at: string | null;
-}
-
-export interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-  request_id: string | null;
-  sources?: SourceCitation[] | null;
-  chart_spec?: Record<string, any> | null;
-  table_preview?: Record<string, any> | null;
-  evidence_ref?: string | null;
-}
-
-export interface ConversationResponse {
-  id: string;
-  title: string | null;
-  messages: ConversationMessage[];
-  created_at: string;
-  updated_at: string | null;
-}
-
-export const agentApi = {
-  chat: (request: AgentChatRequest): Promise<AgentChatResponse> => {
-    return apiFetch('/agent/chat', {
+export const authV2Api = {
+  otpValidate: async (wa_id: string, otp: string): Promise<OtpValidateV2Response> => {
+    const res = await apiFetch<OtpValidateV2Response>('/api/v2/auth/otp/validate', {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify({ wa_id, otp }),
     });
-  },
 
-  listConversations: (pageSize = 20, pageToken?: string) => {
-    const params = new URLSearchParams({ page_size: String(pageSize) });
-    if (pageToken) params.append('page_token', pageToken);
-    return apiFetch<{
-      items: ConversationSummary[];
-      meta: { total_count: number; has_more: boolean };
-    }>(`/agent/conversations?${params}`);
+    // Store short-lived JWT for subsequent API calls.
+    setAuthToken(res.access_token);
+    return res;
   },
+};
 
-  getConversation: (id: string): Promise<ConversationResponse> => {
-    return apiFetch(`/agent/conversations/${id}`);
-  },
 
-  deleteConversation: (id: string): Promise<void> => {
-    return apiFetch(`/agent/conversations/${id}`, { method: 'DELETE' });
-  },
+// =============================================================================
+// v2 Query API
+// =============================================================================
 
-  getScope: (convId: string): Promise<ChatScope | null> => {
-    return apiFetch(`/agent/chat/${convId}/scope`);
-  },
+export interface QueryV2Request {
+  question: string;
+  available_tables?: string[];
+  context?: Record<string, any> | null;
+}
 
-  updateScope: (convId: string, scope: ChatScope): Promise<ChatScope> => {
-    return apiFetch(`/agent/chat/${convId}/scope`, {
-      method: 'PUT',
-      body: JSON.stringify(scope),
+export interface QueryV2Response {
+  conversation_id: string;
+  response: string;
+  intent: string;
+  confidence: number;
+  checkpoints: Array<Record<string, any>>;
+}
+
+export const queryV2Api = {
+  query: (question: string, context?: Record<string, any>): Promise<QueryV2Response> => {
+    const payload: QueryV2Request = {
+      question,
+      // Keep the backend default unless we have a reason to override.
+      context: context ?? null,
+    };
+
+    return apiFetch<QueryV2Response>('/api/v2/query', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
-  },
-
-  resolveScope: (convId: string): Promise<ResolvedScope> => {
-    return apiFetch(`/agent/chat/${convId}/scope/resolve`, { method: 'POST' });
   },
 };
 
@@ -377,129 +304,6 @@ export const approvalsApi = {
   },
 };
 
-// =============================================================================
-// OTP Auth API (n8n proxy)
-// =============================================================================
-
-export interface OtpRequestResponse {
-  ok: boolean;
-  userId?: string;
-  phone?: string;
-  expiresAt?: string;
-  channel?: string;
-  message?: string;
-  debugOtp?: string;
-  error?: string;
-}
-
-export interface OtpValidateResponse {
-  ok: boolean;
-  userId?: string;
-  sessionToken?: string;
-  expiresAt?: string;
-  error?: string;
-}
-
-const N8N_OTP_BASE = (import.meta.env.VITE_N8N_OTP_URL || 'https://shadowcat.cloud/webhook')
-  .trim()
-  .replace(/\/+$/, '');
-
-export const otpApi = {
-  request: async (userId: string, phone: string): Promise<OtpRequestResponse> => {
-    try {
-      const res = await fetch(`${N8N_OTP_BASE}/shadowcat-otp-request`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wa_id: userId, phone_number: phone }),
-      });
-      
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        return { ok: false, error: errData?.error_code || 'OTP_REQUEST_FAILED' };
-      }
-      
-      let data = await res.json();
-      
-      // n8n puede devolver array [{}] en vez de objeto {}
-      if (Array.isArray(data) && data.length > 0) {
-        data = data[0];
-      }
-      
-      return {
-        ok: data.ok ?? data.success ?? true,
-        userId: data.wa_id || data.userId || userId,
-        debugOtp: data.verifyCode, // código para enviar por WhatsApp
-      };
-    } catch (err: any) {
-      return { ok: false, error: err.message || 'NETWORK_ERROR' };
-    }
-  },
-
-  checkVerified: async (userId: string, verifyCode: string): Promise<{ verified: boolean; sessionToken?: string }> => {
-    try {
-      const res = await fetch(`${N8N_OTP_BASE}/shadowcat-otp-check`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wa_id: userId, verifyCode }),
-      });
-      
-      if (!res.ok) {
-        return { verified: false };
-      }
-      
-      let data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        data = data[0];
-      }
-      
-      return {
-        verified: data.verified === true,
-        sessionToken: data.sessionToken,
-      };
-    } catch (err: any) {
-      return { verified: false };
-    }
-  },
-
-  validate: async (userId: string, otp: string): Promise<OtpValidateResponse> => {
-    try {
-      const res = await fetch(`${N8N_OTP_BASE}/shadowcat-otp-validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wa_id: userId, otp }),
-      });
-      
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        return { ok: false, error: errData?.error_code || 'OTP_VALIDATION_FAILED' };
-      }
-      
-      let data = await res.json();
-      
-      // n8n puede devolver array [{}] en vez de objeto {}
-      if (Array.isArray(data) && data.length > 0) {
-        data = data[0];
-      }
-      
-      if (!data.ok) {
-        return { ok: false, error: data.error_code || 'OTP_INVALID' };
-      }
-      
-      // Guardar sessionToken en localStorage
-      if (data.sessionToken) {
-        localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, data.sessionToken);
-      }
-      
-      return {
-        ok: true,
-        sessionToken: data.sessionToken,
-        userId: data.wa_id || data.userId || userId,
-      };
-    } catch (err: any) {
-      return { ok: false, error: err.message || 'NETWORK_ERROR' };
-    }
-  },
-};
 
 // =============================================================================
 // Health Check
@@ -520,9 +324,9 @@ export const healthApi = {
 // Export all APIs
 export const api = {
   documents: documentsApi,
-  agent: agentApi,
   approvals: approvalsApi,
-  otp: otpApi,
+  authV2: authV2Api,
+  queryV2: queryV2Api,
   health: healthApi,
 };
 

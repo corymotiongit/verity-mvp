@@ -14,6 +14,7 @@ NO usa agentes legacy.
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Any
+from uuid import uuid4
 
 from verity.core.pipeline import VerityPipeline, PipelineResult
 from verity.core.agent_policy import AgentPolicy, AgentConfig
@@ -22,7 +23,8 @@ from verity.core.checkpoint_logger import CheckpointStorage, Checkpoint
 from verity.tools.resolve_semantics import ResolveSemanticsTool
 from verity.tools.run_table_query import RunTableQueryTool
 from verity.tools.build_chart import BuildChartTool
-from verity.exceptions import VerityException
+from verity.exceptions import AmbiguousMetricException, UnresolvedMetricException, VerityException
+from verity.core.semantics_context import SemanticsContextStore
 
 
 router = APIRouter(prefix="/api/v2", tags=["v2-query"])
@@ -31,6 +33,7 @@ router = APIRouter(prefix="/api/v2", tags=["v2-query"])
 class QueryRequest(BaseModel):
     """Request para ejecutar query usando nueva arquitectura."""
     question: str
+    conversation_id: Optional[str] = None
     available_tables: list[str] = ["orders"]
     context: Optional[dict[str, Any]] = None
 
@@ -63,9 +66,18 @@ class InMemoryCheckpointStorage(CheckpointStorage):
         return self._checkpoints.get(conversation_id, [])
 
 
+_CHECKPOINT_STORAGE = InMemoryCheckpointStorage()
+_SEMANTICS_CONTEXT = SemanticsContextStore(ttl_seconds=30 * 60)
+_PIPELINE: VerityPipeline | None = None
+
+
 # Inicializar componentes del pipeline
 def get_pipeline() -> VerityPipeline:
     """Factory para crear pipeline configurado."""
+
+    global _PIPELINE
+    if _PIPELINE is not None:
+        return _PIPELINE
     
     # Configurar agente policy
     agent_config = AgentConfig(
@@ -91,8 +103,8 @@ def get_pipeline() -> VerityPipeline:
     tool_registry.register(run_table_query_tool.definition)
     tool_registry.register(build_chart_tool.definition)
     
-    # Configurar checkpoint storage
-    checkpoint_storage = InMemoryCheckpointStorage()
+    # Configurar checkpoint storage (persistente in-process)
+    checkpoint_storage = _CHECKPOINT_STORAGE
     
     # Crear pipeline
     pipeline = VerityPipeline(
@@ -115,7 +127,51 @@ def get_pipeline() -> VerityPipeline:
         build_chart_tool.execute
     )
     
-    return pipeline
+    _PIPELINE = pipeline
+    return _PIPELINE
+
+
+def _format_disambiguation_prompt(candidates: list[dict[str, Any]]) -> str:
+    # Prompt corto, 1 turno.
+    lines = ["¿A cuál métrica te refieres? Responde con el número (1-5) o el nombre exacto:"]
+    for i, c in enumerate(candidates[:5], start=1):
+        metric = c.get("metric")
+        alias = c.get("matched_alias")
+        score = c.get("score")
+        if metric and alias:
+            lines.append(f"{i}) {metric} (alias: {alias}, score: {score})")
+        elif metric:
+            lines.append(f"{i}) {metric}")
+    return "\n".join(lines)
+
+
+def _maybe_apply_disambiguation_answer(*, conversation_id: str, question: str) -> str:
+    """Apply disambiguation answer if pending candidates exist."""
+    ctx = _SEMANTICS_CONTEXT.get(conversation_id)
+    pending = ctx.pending_candidates or []
+    qn = (question or "").strip()
+    
+    if not pending:
+        return question
+
+    # Option 1: number selection (1-5)
+    if qn.isdigit():
+        idx = int(qn)
+        if 1 <= idx <= min(5, len(pending)):
+            chosen = pending[idx - 1]
+            metric = chosen.get("metric")
+            if isinstance(metric, str) and metric.strip():
+                _SEMANTICS_CONTEXT.clear_pending_candidates(conversation_id=conversation_id)
+                return metric.strip()
+
+    # Option 2: canonical name match
+    for c in pending[:5]:
+        metric = c.get("metric")
+        if isinstance(metric, str) and metric.strip() and metric.strip().lower() == qn.lower():
+            _SEMANTICS_CONTEXT.clear_pending_candidates(conversation_id=conversation_id)
+            return metric.strip()
+
+    return question
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -136,28 +192,93 @@ async def execute_query(request: QueryRequest) -> QueryResponse:
     try:
         # Crear pipeline
         pipeline = get_pipeline()
+
+        # conversation_id estable (para contexto + checkpoints)
+        conversation_id = request.conversation_id or str(uuid4())
+
+        # Si venimos de una ambigüedad, aceptar respuesta (1 turno)
+        question = _maybe_apply_disambiguation_answer(conversation_id=conversation_id, question=request.question)
         
         # Preparar contexto
         context = request.context or {}
         context["available_tables"] = request.available_tables
+        # Contexto conversacional leve: último metric/table resueltos
+        conv_ctx = _SEMANTICS_CONTEXT.get(conversation_id)
+        context["conversation_context"] = {
+            "last_metric": conv_ctx.last_metric,
+            "last_table": conv_ctx.last_table,
+            "last_alias": conv_ctx.last_alias,
+        }
         
         # Ejecutar pipeline
         result: PipelineResult = await pipeline.execute(
-            question=request.question,
-            context=context
+            question=question,
+            context=context,
+            conversation_id=conversation_id,
         )
         
         # Convertir checkpoints a dict
         from dataclasses import asdict
         checkpoints_dict = [asdict(cp) for cp in result.checkpoints]
+
+        # Actualizar contexto conversacional con la última resolución semántica exitosa
+        try:
+            sem_cp = next(
+                (cp for cp in result.checkpoints if cp.tool == "semantic_resolution" and cp.status == "ok"),
+                None,
+            )
+            if sem_cp and isinstance(sem_cp.output, dict):
+                metrics = sem_cp.output.get("metrics")
+                tables = sem_cp.output.get("tables")
+                if isinstance(metrics, list) and metrics and isinstance(metrics[0], dict):
+                    metric_name = metrics[0].get("name")
+                    alias = metrics[0].get("alias_matched")
+                else:
+                    metric_name = None
+                    alias = None
+                if isinstance(tables, list) and tables and isinstance(tables[0], str):
+                    table_name = tables[0]
+                else:
+                    table_name = None
+                _SEMANTICS_CONTEXT.set_last_resolution(
+                    conversation_id=conversation_id,
+                    metric=str(metric_name) if metric_name else None,
+                    table=str(table_name) if table_name else None,
+                    alias=str(alias) if alias else None,
+                )
+        except Exception:
+            # Best-effort only
+            pass
         
         return QueryResponse(
-            conversation_id=result.conversation_id,
+            conversation_id=conversation_id,
             response=result.response,
             intent=result.intent.value,
             confidence=result.confidence,
             checkpoints=checkpoints_dict
         )
+
+    except AmbiguousMetricException as e:
+        details = e.details if isinstance(e.details, dict) else {}
+        conv_id = str(details.get("conversation_id") or request.conversation_id or str(uuid4()))
+        candidates = details.get("candidates") if isinstance(details.get("candidates"), list) else []
+        checkpoints = details.get("checkpoints") if isinstance(details.get("checkpoints"), list) else []
+
+        # Guardar opciones para 1 turno
+        if candidates:
+            _SEMANTICS_CONTEXT.set_pending_candidates(conversation_id=conv_id, candidates=candidates[:5])
+
+        return QueryResponse(
+            conversation_id=conv_id,
+            response=_format_disambiguation_prompt(candidates),
+            intent="aggregate",
+            confidence=0.2,
+            checkpoints=checkpoints,
+        )
+
+    except UnresolvedMetricException:
+        # Mantener contrato actual (error tipado) para unresolved.
+        raise
     
     except VerityException:
         raise

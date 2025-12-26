@@ -29,6 +29,7 @@ from verity.core.tool_executor import ToolExecutor
 from verity.core.checkpoint_logger import CheckpointLogger, Checkpoint, CheckpointStorage
 from verity.core.response_composer import ResponseComposer
 from verity.exceptions import VerityException
+from verity.observability import get_metrics_store
 
 
 @dataclass
@@ -65,7 +66,8 @@ class VerityPipeline:
     async def execute(
         self,
         question: str,
-        context: Optional[dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None,
+        conversation_id: str | None = None,
     ) -> PipelineResult:
         """
         Ejecuta el pipeline completo.
@@ -77,7 +79,7 @@ class VerityPipeline:
         Returns:
             PipelineResult con respuesta y checkpoints
         """
-        conversation_id = str(uuid4())
+        conversation_id = str(conversation_id) if conversation_id else str(uuid4())
         checkpoints: list[Checkpoint] = []
         
         # Paso 1: Resolver intención
@@ -135,6 +137,9 @@ class VerityPipeline:
                     execution_time_ms=execution_time_ms
                 )
                 
+                # Record metrics
+                get_metrics_store().record_tool_latency(tool_name, execution_time_ms)
+                
                 # Guardar checkpoint
                 checkpoints.append(self.checkpoint_logger.get_by_conversation(conversation_id)[-1])
                 
@@ -161,11 +166,17 @@ class VerityPipeline:
                 if isinstance(e, VerityException):
                     from dataclasses import asdict
 
+                    # Record error metrics
+                    get_metrics_store().record_tool_error(tool_name, e.code)
+
                     details = e.details if isinstance(e.details, dict) else {}
                     details = {**details}
                     details.setdefault("conversation_id", conversation_id)
                     details.setdefault("checkpoints", [asdict(cp) for cp in checkpoints])
                     e.details = details
+                else:
+                    # Record generic error
+                    get_metrics_store().record_tool_error(tool_name, type(e).__name__)
                 
                 raise
         

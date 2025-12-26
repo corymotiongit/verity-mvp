@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import FileDropzone, { FileMetadata } from '../components/FileDropzone';
 import { formatBytes } from '../constants';
 import { VerityDocument } from '../types';
-import { documentsApi, agentApi, DocumentResponse } from '../services/api';
+import { documentsApi, DocumentResponse, queryV2Api } from '../services/api';
 import { FileText, Image as ImageIcon, FileSpreadsheet, MoreVertical, Search, Filter, X, Eye, RefreshCw, Trash2, Loader2 } from 'lucide-react';
 
 // Convert API response to frontend type
@@ -126,18 +126,27 @@ const FilesPage: React.FC = () => {
 
         setGeneratingSummary(true);
         try {
-            const response = await agentApi.chat({
-                message: `Genera un resumen completo del documento "${doc.display_name}". Incluye: 
-                1. Tipo de documento
-                2. Puntos clave o temas principales
-                3. Fechas importantes si las hay
-                4. Personas o entidades mencionadas
-                5. Conclusiones o acciones requeridas`,
-            });
+            const response = await queryV2Api.query(
+                `Genera un resumen completo del documento "${doc.display_name}". Incluye:
+1. Tipo de documento
+2. Puntos clave o temas principales
+3. Fechas importantes si las hay
+4. Personas o entidades mencionadas
+5. Conclusiones o acciones requeridas`,
+                {
+                    // Best-effort: el backend v2 puede ignorar esto hoy.
+                    document: {
+                        id: doc.id,
+                        display_name: doc.display_name,
+                        mime_type: doc.mime_type,
+                        created_at: doc.created_at,
+                    },
+                }
+            );
 
             setSummaries(prev => ({
                 ...prev,
-                [doc.id]: response.message.content,
+                [doc.id]: response.response,
             }));
         } catch (err) {
             console.error('Summary generation failed:', err);

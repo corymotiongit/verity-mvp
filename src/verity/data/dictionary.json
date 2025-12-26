@@ -1,6 +1,6 @@
 {
-  "version": "1.0",
-  "updated_at": "2025-12-20T00:00:00Z",
+  "version": "1.1",
+  "updated_at": "2025-12-25T00:00:00Z",
   "description": "Data Dictionary para Verity - Definiciones canónicas de tablas y métricas",
   "tables": {
     "orders": {
@@ -40,8 +40,92 @@
       "data_type": "integer",
       "requires": ["order_id"],
       "filters": [],
-      "aliases": ["orders", "num_orders", "cantidad de ordenes", "número de órdenes"],
+      "aliases": [
+        "orders",
+        "num_orders",
+        "order count",
+        "cantidad de ordenes",
+        "cantidad de órdenes",
+        "numero de ordenes",
+        "número de órdenes",
+        "ordenes",
+        "órdenes",
+        "ordenes totales",
+        "órdenes totales",
+        "pedidos",
+        "número de pedidos",
+        "cantidad de pedidos"
+      ],
       "format": "number"
+    },
+    "delivered_orders": {
+      "description": "Órdenes entregadas",
+      "table": "orders",
+      "expression": "COUNT(order_id)",
+      "data_type": "integer",
+      "requires": ["order_id", "order_status"],
+      "filters": [
+        {
+          "column": "order_status",
+          "operator": "=",
+          "value": "delivered"
+        }
+      ],
+      "aliases": [
+        "delivered orders",
+        "ordenes entregadas",
+        "órdenes entregadas",
+        "pedidos entregados",
+        "entregadas"
+      ],
+      "format": "number",
+      "business_notes": "Filtra por order_status = 'delivered'"
+    },
+    "cancelled_orders": {
+      "description": "Órdenes canceladas",
+      "table": "orders",
+      "expression": "COUNT(order_id)",
+      "data_type": "integer",
+      "requires": ["order_id", "order_status"],
+      "filters": [
+        {
+          "column": "order_status",
+          "operator": "=",
+          "value": "cancelled"
+        }
+      ],
+      "aliases": [
+        "cancelled orders",
+        "ordenes canceladas",
+        "órdenes canceladas",
+        "pedidos cancelados",
+        "canceladas"
+      ],
+      "format": "number",
+      "business_notes": "Filtra por order_status = 'cancelled'"
+    },
+    "pending_orders": {
+      "description": "Órdenes pendientes",
+      "table": "orders",
+      "expression": "COUNT(order_id)",
+      "data_type": "integer",
+      "requires": ["order_id", "order_status"],
+      "filters": [
+        {
+          "column": "order_status",
+          "operator": "=",
+          "value": "pending"
+        }
+      ],
+      "aliases": [
+        "pending orders",
+        "ordenes pendientes",
+        "órdenes pendientes",
+        "pedidos pendientes",
+        "pendientes"
+      ],
+      "format": "number",
+      "business_notes": "Filtra por order_status = 'pending'"
     },
     "total_revenue": {
       "description": "Ingresos totales de órdenes entregadas",
@@ -56,7 +140,20 @@
           "value": "delivered"
         }
       ],
-      "aliases": ["revenue", "sales", "ingresos", "ventas", "ingresos totales", "tot_reven"],
+      "aliases": [
+        "revenue",
+        "sales",
+        "ingresos",
+        "ventas",
+        "ingresos totales",
+        "tot_reven",
+        "ingresos entregadas",
+        "ventas entregadas",
+        "ingresos netos",
+        "ingreso neto",
+        "facturacion",
+        "facturación"
+      ],
       "format": "currency",
       "business_notes": "Solo se cuentan órdenes con status 'delivered'"
     },
@@ -67,7 +164,15 @@
       "data_type": "number",
       "requires": ["order_amount"],
       "filters": [],
-      "aliases": ["gross revenue", "ventas", "ventas brutas", "ingresos brutos"],
+      "aliases": [
+        "gross revenue",
+        "gross sales",
+        "ventas",
+        "ventas brutas",
+        "ingresos brutos",
+        "ingresos sin filtro",
+        "ventas sin filtro"
+      ],
       "format": "currency",
       "business_notes": "Incluye todas las órdenes, sin filtrar por status"
     },
@@ -84,7 +189,14 @@
           "value": "delivered"
         }
       ],
-      "aliases": ["retention", "returning_customers", "clientes recurrentes", "clientes que regresan"],
+      "aliases": [
+        "retention",
+        "returning_customers",
+        "repeat customers",
+        "clientes recurrentes",
+        "clientes repetidos",
+        "clientes que regresan"
+      ],
       "format": "number",
       "business_notes": "Un cliente se considera recurrente si tiene más de una orden con status 'delivered'"
     },
@@ -101,7 +213,16 @@
           "value": "delivered"
         }
       ],
-      "aliases": ["aov", "average order value", "ticket promedio", "valor promedio"],
+      "aliases": [
+        "aov",
+        "average order value",
+        "average order amount",
+        "ticket promedio",
+        "ticket medio",
+        "importe promedio",
+        "valor promedio",
+        "promedio por orden"
+      ],
       "format": "currency"
     }
   },
@@ -110,6 +231,11 @@
       "version": "1.0",
       "date": "2025-12-20",
       "change": "Initial data dictionary with orders table and 4 canonical metrics"
+    },
+    {
+      "version": "1.1",
+      "date": "2025-12-25",
+      "change": "Expanded metrics map: added order-status metrics and richer aliases; kept metric-level filters deterministic"
     }
   ]
 }

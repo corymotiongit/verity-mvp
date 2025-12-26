@@ -25,6 +25,7 @@ from verity.auth import create_access_token
 from verity.config import Settings, get_settings
 from verity.core.users_repository import upsert_user_identity
 from verity.exceptions import VerityException
+from verity.observability import get_metrics_store
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,27 @@ async def otp_validate_v2(
 
     request_id = getattr(request.state, "request_id", "unknown")
 
+    if settings.auth_otp_insecure_dev_bypass and not settings.is_production:
+        logger.warning("[%s] V2_OTP_VALIDATE wa_id=%s -> insecure_dev_bypass", request_id, payload.wa_id)
+        now = datetime.now(timezone.utc)
+        try:
+            upsert_user_identity(wa_id=payload.wa_id, phone_number=None, last_login=now)
+        except Exception as e:
+            logger.warning(
+                "[%s] V2_OTP_VALIDATE wa_id=%s -> bypass_identity_upsert_failed: %s",
+                request_id,
+                payload.wa_id,
+                str(e),
+            )
+        access_token, expires_in = create_access_token(
+            settings=settings,
+            user_id_raw=payload.wa_id,
+            roles=["user"],
+            now=now,
+        )
+        get_metrics_store().record_otp_attempt(payload.wa_id, success=True)
+        return OtpValidateV2Out(access_token=access_token, expires_in=expires_in)
+
     if not (settings.n8n.base_url or "").strip():
         logger.warning(f"[{request_id}] V2_OTP_VALIDATE wa_id={payload.wa_id} -> missing_n8n_base_url")
         _raise_auth_error(code="WHATSAPP_PROVIDER_DOWN", request_id=request_id)
@@ -129,6 +151,7 @@ async def otp_validate_v2(
         if error_code not in {"OTP_INVALID", "OTP_EXPIRED", "OTP_RATE_LIMITED"}:
             error_code = "OTP_INVALID"
         logger.info(f"[{request_id}] V2_OTP_VALIDATE wa_id={payload.wa_id} -> fail {error_code}")
+        get_metrics_store().record_otp_attempt(payload.wa_id, success=False, error_code=error_code)
         _raise_auth_error(code=error_code, request_id=request_id)
 
     wa_id = data.get("wa_id") if isinstance(data.get("wa_id"), str) else payload.wa_id
@@ -156,5 +179,6 @@ async def otp_validate_v2(
     )
 
     logger.info(f"[{request_id}] V2_OTP_VALIDATE wa_id={wa_id} -> ok")
+    get_metrics_store().record_otp_attempt(wa_id, success=True)
 
     return OtpValidateV2Out(access_token=access_token, expires_in=expires_in)

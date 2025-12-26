@@ -44,8 +44,17 @@ class _FakeSupabase:
 
 
 @pytest.fixture(autouse=True)
-def _clear_settings_cache():
+def _clear_settings_cache(monkeypatch):
+    # Keep tests deterministic even if local .env enables bypasses.
+    monkeypatch.setenv("AUTH_OTP_INSECURE_DEV_BYPASS", "false")
+    # Disable rate limiting for these tests to isolate OTP error handling
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
     get_settings.cache_clear()
+    
+    # Clear rate limit store
+    from verity.main import _rate_limit_store
+    _rate_limit_store.clear()
+    
     yield
     get_settings.cache_clear()
 

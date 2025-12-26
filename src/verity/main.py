@@ -7,7 +7,9 @@ FastAPI application with modular architecture and feature flags.
 import logging
 import sys
 import traceback
+from collections import defaultdict
 from contextlib import asynccontextmanager
+from time import time
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, Request
@@ -17,6 +19,7 @@ from fastapi.responses import JSONResponse
 from verity import __version__
 from verity.config import get_settings
 from verity.exceptions import VerityException
+from verity.observability import get_metrics_store
 from verity.schemas import ErrorDetail, ErrorResponse, HealthResponse
 
 # Import module routers
@@ -37,6 +40,7 @@ from verity.api.routes.auth_v2 import router as auth_v2_router
 
 # Import v2 API (new architecture)
 from verity.api.routes.query_v2 import router as query_v2_router
+from verity.api.routes.metrics_v2 import router as metrics_v2_router
 
 # Configure standard logging
 logging.basicConfig(
@@ -130,6 +134,92 @@ async def legacy_compat_guard(request: Request, call_next):
                 },
             )
 
+    return await call_next(request)
+
+
+# In-memory rate limit store (per-process; use Redis for multi-instance prod)
+_rate_limit_store: dict[str, list[float]] = defaultdict(list)
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """
+    Rate limiting middleware for production hardening.
+    
+    Limits:
+    - /api/v2/auth/*: 5 requests/min per IP
+    - /api/v2/query: 30 requests/min per IP
+    """
+    settings = get_settings()
+    
+    # Only enforce in production or if explicitly enabled
+    if not settings.is_production and not settings.rate_limit_enabled:
+        return await call_next(request)
+    
+    path = request.url.path
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # Determine rate limit based on path
+    if path.startswith("/api/v2/auth"):
+        key = f"auth:{client_ip}"
+        limit = settings.rate_limit_auth_per_min
+        window = 60
+    elif path.startswith("/api/v2/query"):
+        key = f"query:{client_ip}"
+        limit = settings.rate_limit_query_per_min
+        window = 60
+    else:
+        # No rate limiting for other paths
+        return await call_next(request)
+    
+    now = time()
+    
+    # Prune old entries
+    _rate_limit_store[key] = [t for t in _rate_limit_store[key] if now - t < window]
+    
+    if len(_rate_limit_store[key]) >= limit:
+        get_metrics_store().record_error("RATE_LIMITED")
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(window)},
+            content={
+                "error": {
+                    "code": "RATE_LIMITED",
+                    "message": f"Too many requests. Limit: {limit}/min.",
+                }
+            },
+        )
+    
+    _rate_limit_store[key].append(now)
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def body_size_limit_middleware(request: Request, call_next):
+    """
+    Reject requests with body larger than configured limit.
+    
+    Protects against large payload attacks.
+    """
+    settings = get_settings()
+    content_length = request.headers.get("content-length")
+    
+    if content_length:
+        try:
+            size = int(content_length)
+            if size > settings.max_body_size_bytes:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "error": {
+                            "code": "PAYLOAD_TOO_LARGE",
+                            "message": f"Request body exceeds {settings.max_body_size_bytes} bytes.",
+                        }
+                    },
+                )
+        except ValueError:
+            pass
+    
     return await call_next(request)
 
 
@@ -228,6 +318,9 @@ app.include_router(auth_v2_router)
 
 # v2 API (new architecture - tool-based)
 app.include_router(query_v2_router)
+
+# v2 metrics (observability)
+app.include_router(metrics_v2_router)
 
 
 # =============================================================================

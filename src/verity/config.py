@@ -143,6 +143,15 @@ class Settings(BaseSettings):
         validation_alias="AUTH_INSECURE_DEV_BYPASS",
     )
 
+    auth_otp_insecure_dev_bypass: bool = Field(
+        default=False,
+        description=(
+            "If true (and not production), bypass OTP validation via n8n and issue JWT for any wa_id/otp. "
+            "Intended for local MVP testing only."
+        ),
+        validation_alias="AUTH_OTP_INSECURE_DEV_BYPASS",
+    )
+
     # Auth (FastAPI-issued JWT access tokens)
     auth_jwt_secret: str = Field(
         default="demo-jwt-secret-for-development-only",
@@ -165,6 +174,33 @@ class Settings(BaseSettings):
         default=True,
         description="If true, block tabular answers that lack row_ids evidence (audit guard).",
         validation_alias="AGENT_ENFORCE_ROW_IDS_GUARD",
+    )
+
+    # Hardening / Rate Limiting
+    rate_limit_enabled: bool = Field(
+        default=True,
+        description="Enable rate limiting middleware (recommended for production).",
+        validation_alias="RATE_LIMIT_ENABLED",
+    )
+    rate_limit_auth_per_min: int = Field(
+        default=5,
+        description="Max auth requests per minute per IP.",
+        validation_alias="RATE_LIMIT_AUTH_PER_MIN",
+    )
+    rate_limit_query_per_min: int = Field(
+        default=30,
+        description="Max query requests per minute per user/IP.",
+        validation_alias="RATE_LIMIT_QUERY_PER_MIN",
+    )
+    request_timeout_seconds: int = Field(
+        default=30,
+        description="Global request timeout in seconds.",
+        validation_alias="REQUEST_TIMEOUT_SECONDS",
+    )
+    max_body_size_bytes: int = Field(
+        default=1_000_000,
+        description="Maximum request body size in bytes (1MB default).",
+        validation_alias="MAX_BODY_SIZE_BYTES",
     )
 
     # Nested settings

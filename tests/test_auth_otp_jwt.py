@@ -13,6 +13,9 @@ from verity.main import app
 
 
 def test_otp_validate_mock_issues_access_token_and_jwt_auth_works(monkeypatch):
+    # Ensure legacy endpoints are available during this legacy-contract test.
+    monkeypatch.setenv("LEGACY_COMPAT_ENABLED", "true")
+
     # Step 1: enable OTP mock mode to get a token without n8n/WhatsApp.
     monkeypatch.setenv("AUTH_INSECURE_DEV_BYPASS", "true")
     get_settings.cache_clear()
