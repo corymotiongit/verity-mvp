@@ -150,13 +150,29 @@
         "type": "integer",
         "description": "Número de filas retornadas"
       },
-      "execution_time_ms": {
-        "type": "number",
-        "description": "Tiempo de ejecución en milisegundos"
-      },
       "rows_count": {
         "type": "integer",
         "description": "Alias de row_count para checkpointing"
+      },
+      "rows_before_limit": {
+        "type": "integer",
+        "description": "Número de filas antes de aplicar limit (para detectar truncación)"
+      },
+      "rows_truncated": {
+        "type": "boolean",
+        "description": "True si los resultados fueron truncados por limit"
+      },
+      "data_source": {
+        "type": "string",
+        "enum": [
+          "csv",
+          "supabase"
+        ],
+        "description": "Fuente de datos real usada (csv local o supabase remoto)"
+      },
+      "execution_time_ms": {
+        "type": "number",
+        "description": "Tiempo de ejecución en milisegundos"
       },
       "schema": {
         "type": "object",
@@ -175,7 +191,8 @@
       "table_id",
       "columns",
       "rows",
-      "row_count"
+      "row_count",
+      "data_source"
     ]
   },
   "deterministic": true,

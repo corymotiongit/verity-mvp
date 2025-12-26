@@ -13,6 +13,7 @@ Output: table_id + columns + rows + row_count + execution_time_ms
 REGLA CRÍTICA: columns debe resolverse desde metrics map del Data Dictionary, NO del LLM.Ver schema.json para contrato completo.
 """
 
+import logging
 from verity.tools.base import BaseTool, ToolDefinition
 from typing import Any, Iterable
 import json
@@ -25,6 +26,8 @@ from verity.core.table_store import TABLE_STORE, TableResult
 
 import hashlib
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 # Cache global simple para resultados de queries (MVP)
 _QUERY_CACHE: dict[str, tuple[datetime, Any]] = {}
@@ -78,7 +81,7 @@ class RunTableQueryTool(BaseTool):
         filters_spec = input_data.get("filters", [])
         group_by = input_data.get("group_by", [])
         order_by = input_data.get("order_by", [])
-        limit = input_data.get("limit", 20000)
+        limit = input_data.get("limit", 1000)  # Alineado con schema.json
 
         # Compare-periods (opcional)
         time_column = input_data.get("time_column")
@@ -88,12 +91,14 @@ class RunTableQueryTool(BaseTool):
         
         start_time = time.time()
 
-        # 0. Verificar Cache
+        # 0. Verificar Cache (key incluye TODOS los parámetros que alteran resultados)
         cache_key_content = json.dumps({
             "table": table_name,
+            "columns": columns,
             "metrics": metrics,
             "filters": filters_spec,
             "group_by": group_by,
+            "order_by": order_by,
             "limit": limit,
             "time_column": time_column,
             "time_grain": time_grain,
@@ -121,9 +126,14 @@ class RunTableQueryTool(BaseTool):
             table_file = file
             break
         
+        # Determinar y loguear data_source explícitamente
+        data_source: str
+        
         if table_file:
-            # Cargar desde CSV local
+            data_source = "csv"
+            logger.info(f"[run_table_query] Loading table '{table_name}' from CSV: {table_file}")
             df = pd.read_csv(table_file, encoding="utf-8")
+            logger.info(f"[run_table_query] Loaded {len(df)} rows from CSV")
         else:
             # Fallback: cargar desde Supabase
             import os
@@ -154,6 +164,8 @@ class RunTableQueryTool(BaseTool):
             if not all_data:
                 raise FileNotFoundError(f"Table '{table_name}' not found or empty in Supabase")
             
+            data_source = "supabase"
+            logger.info(f"[run_table_query] Loaded {len(all_data)} rows from Supabase")
             df = pd.DataFrame(all_data)
 
         def _ensure_datetime_column(local_df: "pd.DataFrame", column: str) -> "pd.Series":
@@ -614,8 +626,15 @@ class RunTableQueryTool(BaseTool):
             # Orden determinista por la primera clave de group_by si no se especificó order_by
             result_df = result_df.sort_values(by=[group_by[0]], ascending=True)
         
-        # Aplicar limit
+        # Aplicar limit con tracking de truncación
+        rows_before_limit = len(result_df)
         result_df = result_df.head(limit)
+        rows_truncated = rows_before_limit > len(result_df)
+        
+        if rows_truncated:
+            logger.warning(
+                f"[run_table_query] Results truncated: {rows_before_limit} -> {len(result_df)} rows (limit={limit})"
+            )
         
         # Convertir a formato de salida
         execution_time_ms = (time.time() - start_time) * 1000
@@ -641,6 +660,9 @@ class RunTableQueryTool(BaseTool):
             "rows": result_df.values.tolist(),
             "row_count": len(result_df),
             "rows_count": len(result_df),
+            "rows_before_limit": rows_before_limit,
+            "rows_truncated": rows_truncated,
+            "data_source": data_source,
             "schema": schema_out,
             "execution_time_ms": execution_time_ms,
             "cache_hit": False,

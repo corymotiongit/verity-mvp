@@ -320,7 +320,11 @@ class ResolveSemanticsTool(BaseTool):
         # =====================================================================
         # 2. Detectar límite (top N, N mejores, etc.)
         # =====================================================================
+        import logging
+        logger = logging.getLogger(__name__)
+        
         limit = 10  # default
+        limit_requested = None
         limit_patterns = [
             r"\btop\s*(\d+)\b",
             r"\b(\d+)\s*(?:mejores|principales|primeros|mas|más)\b",
@@ -329,7 +333,12 @@ class ResolveSemanticsTool(BaseTool):
         for pattern in limit_patterns:
             match = re.search(pattern, qn)
             if match:
-                limit = min(int(match.group(1)), 50)  # max 50
+                limit_requested = int(match.group(1))
+                limit = min(limit_requested, 50)  # max 50
+                if limit_requested > 50:
+                    logger.warning(
+                        f"[resolve_semantics] Ranking limit capped: requested {limit_requested}, using {limit}"
+                    )
                 break
         
         # =====================================================================
@@ -406,6 +415,8 @@ class ResolveSemanticsTool(BaseTool):
             "group_by": [group_by_col],
             "order_by": [{"column": "count", "direction": "DESC"}],
             "limit": limit,
+            "limit_requested": limit_requested,
+            "limit_capped": limit_requested is not None and limit_requested > 50,
             "confidence": 0.95,
             "unresolved_terms": [],
             "data_dictionary_version": dd.version,
