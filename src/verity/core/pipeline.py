@@ -281,6 +281,17 @@ class VerityPipeline:
             # Usar limit del semantic output si existe (para rankings)
             limit = previous_output.get("limit", 20000)
             
+            # Construir result_metadata para el ResponseComposer
+            result_metadata = {}
+            operation = previous_output.get("operation")
+            if operation == "rank":
+                result_metadata = {
+                    "result_type": "ranking",
+                    "label_column": group_by[0] if group_by else "unknown",
+                    "value_column": metrics_input[0]["name"] if metrics_input else "count",
+                    "limit": limit
+                }
+
             result = {
                 "table": tables[0] if tables else "orders",
                 "columns": list(set(all_requires)),
@@ -289,6 +300,7 @@ class VerityPipeline:
                 "group_by": group_by,
                 "order_by": order_by,
                 "limit": limit,
+                "result_metadata": result_metadata,
                 # Campos opcionales para compare-periods (run_table_query los interpreta determinísticamente)
                 "time_column": time_column,
                 "time_grain": time_grain,

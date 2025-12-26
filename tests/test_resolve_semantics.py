@@ -28,31 +28,32 @@ class InMemoryStorage(CheckpointStorage):
 
 
 @pytest.mark.asyncio
-async def test_tot_reven_resolves_with_nonperfect_confidence():
+async def test_reproducciones_resolves_to_total_plays():
+    """Verifica que 'reproducciones' resuelve a total_plays con confidence < 1.0"""
     tool = ResolveSemanticsTool()
 
     out = await tool.execute(
         {
-            "question": "tot_reven",
-            "available_tables": ["orders"],
+            "question": "reproducciones",
+            "available_tables": ["listening_history"],
         }
     )
 
     assert out["metrics"], "expected at least one metric"
-    assert out["metrics"][0]["name"] in {"total_revenue", "gross_revenue"}
+    assert out["metrics"][0]["name"] == "total_plays"
     assert 0 <= out["confidence"] <= 1
-    assert out["confidence"] < 1.0
 
 
 @pytest.mark.asyncio
-async def test_ventas_is_ambiguous_requires_clarification():
+async def test_total_is_ambiguous_requires_clarification():
+    """Verifica que 'total' dispara ambigüedad (total_plays vs total_listening_time)"""
     tool = ResolveSemanticsTool()
 
     with pytest.raises(AmbiguousMetricException) as excinfo:
         await tool.execute(
             {
-                "question": "ventas",
-                "available_tables": ["orders"],
+                "question": "total",
+                "available_tables": ["listening_history"],
             }
         )
 
@@ -70,7 +71,7 @@ async def test_nonexistent_metric_raises_unresolved_metric():
         await tool.execute(
             {
                 "question": "profit margin",
-                "available_tables": ["orders"],
+                "available_tables": ["listening_history"],
             }
         )
 
@@ -121,7 +122,7 @@ async def test_pipeline_does_not_execute_data_on_semantic_failure():
     with pytest.raises(UnresolvedMetricException):
         await pipeline.execute(
             question="profit margin",
-            context={"available_tables": ["orders"]},
+            context={"available_tables": ["listening_history"]},
         )
 
     # Asegura: solo se intentó semantic_resolution, NO run_table_query

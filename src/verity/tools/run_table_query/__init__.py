@@ -110,6 +110,7 @@ class RunTableQueryTool(BaseTool):
                 execution_time_ms = (time.time() - start_time) * 1000
                 cached_result["execution_time_ms"] = execution_time_ms
                 cached_result["cache_hit"] = True
+                cached_result["result_metadata"] = input_data.get("result_metadata", {})
                 return cached_result
         
         # Cargar tabla (buscar en uploads/canonical/ o fallback a Supabase)
@@ -642,7 +643,8 @@ class RunTableQueryTool(BaseTool):
             "rows_count": len(result_df),
             "schema": schema_out,
             "execution_time_ms": execution_time_ms,
-            "cache_hit": False
+            "cache_hit": False,
+            "result_metadata": input_data.get("result_metadata", {})
         }
 
         # Guardar en Cache

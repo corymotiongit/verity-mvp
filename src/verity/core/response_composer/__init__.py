@@ -33,6 +33,13 @@ CHECKPOINTS:
 PREGUNTA ORIGINAL:
 {user_question}
 
+INSTRUCCIONES ADICIONALES PARA RANKINGS:
+Si el resultado tiene "result_metadata" con "result_type": "ranking":
+1. Usa el "limit" real para el título (ej: "Top 5...").
+2. Genera una tabla Markdown limpia con columnas: #, [Entidad], [Valor].
+3. No trunques la lista arbitrariamente, muestra todas las filas retornadas (hasta el limit).
+4. Formatea los números (miles con comas).
+
 RESPUESTA (solo explicación de los datos):
 '''
 
@@ -126,9 +133,41 @@ class ResponseComposer:
         output = query_checkpoint.output
         columns = output.get("columns", [])
         rows = output.get("rows", [])
+        result_metadata = output.get("result_metadata", {})
         
         if not rows or not columns:
             return "La consulta se ejecutó pero no retornó resultados."
+        
+        # =====================================================================
+        # Manejo de Rankings (Fallback determinista)
+        # =====================================================================
+        if result_metadata.get("result_type") == "ranking":
+            limit = result_metadata.get("limit", len(rows))
+            label_col = result_metadata.get("label_column", columns[0])
+            value_col = result_metadata.get("value_column", columns[1] if len(columns) > 1 else columns[0])
+            
+            # Título
+            response = f"Aquí está tu Top {limit} de {self._get_friendly_name(label_col)}:\n\n"
+            
+            # Tabla Markdown
+            response += f"| # | {self._get_friendly_name(label_col)} | {self._get_friendly_name(value_col)} |\n"
+            response += "|---|---|---|\n"
+            
+            for i, row in enumerate(rows[:limit]):
+                # Asumimos orden: [label, value] o buscar índices
+                label_val = row[0] # Simplificación: asumimos primera columna es label
+                value_val = row[1] if len(row) > 1 else "N/A"
+                
+                # Formatear valor
+                formatted_val = self._format_value(value_col, value_val)
+                
+                response += f"| {i+1} | {label_val} | {formatted_val} |\n"
+            
+            return response
+
+        # =====================================================================
+        # Manejo estándar (una sola fila o lista simple)
+        # =====================================================================
         
         # Formatear respuesta con valores
         parts = []
@@ -179,14 +218,17 @@ class ResponseComposer:
     def _get_friendly_name(self, column: str) -> str:
         """Convierte nombre de columna a texto amigable."""
         mapping = {
-            "total_plays": "Total de reproducciones",
+            "total_plays": "Reproducciones",
             "unique_tracks": "Canciones únicas",
             "unique_artists": "Artistas únicos",
-            "total_listening_time": "Tiempo total escuchando",
-            "avg_track_duration": "Duración promedio por canción",
+            "total_listening_time": "Tiempo total",
+            "avg_track_duration": "Duración promedio",
             "top_artist": "Artista más escuchado",
             "total_orders": "Total de órdenes",
-            "total_revenue": "Ingresos totales",
+            "total_revenue": "Ingresos",
+            "artist_name": "Artista",
+            "track_name": "Canción",
+            "count": "Cantidad",
         }
         return mapping.get(column, column.replace("_", " ").title())
     

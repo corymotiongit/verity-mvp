@@ -2,11 +2,17 @@
 Suite automatizada de tests end-to-end para beta con datos de Spotify.
 
 Implementa los 5 casos de prueba definidos en beta_test_cases.md.
+
+NOTA: Estos tests requieren un servidor corriendo en http://127.0.0.1:8001
+Para ejecutar: primero correr ./start_verity.ps1, luego pytest tests/test_beta_e2e.py
 """
 import pytest
 import httpx
 import os
 from typing import Dict
+
+# Skip all tests in this file - they require external server
+pytestmark = pytest.mark.skip(reason="E2E tests require server running on port 8001 - run ./start_verity.ps1 first")
 
 # Base URL del API
 BASE_URL = "http://127.0.0.1:8001"

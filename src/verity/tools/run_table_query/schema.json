@@ -114,6 +114,10 @@
         "maximum": 50000,
         "description": "Máximo de filas a retornar",
         "default": 1000
+      },
+      "result_metadata": {
+        "type": "object",
+        "description": "Metadata semántica del resultado (tipo, label, value, etc.)"
       }
     },
     "required": [
@@ -161,6 +165,10 @@
       "cache_hit": {
         "type": "boolean",
         "description": "Indica si el resultado vino de cache"
+      },
+      "result_metadata": {
+        "type": "object",
+        "description": "Metadata semántica del resultado (tipo, label, value, etc.)"
       }
     },
     "required": [
