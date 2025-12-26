@@ -104,16 +104,119 @@ class ResponseComposer:
         )
     
     def _fallback_response(self, question: str, checkpoints: list[Checkpoint]) -> str:
-        """Genera respuesta básica sin LLM en caso de error."""
+        """Genera respuesta con valores explícitos sin LLM."""
         if not checkpoints:
             return f"No pude procesar tu pregunta: '{question}'. Intenta reformularla."
         
-        last_checkpoint = checkpoints[-1]
+        # Buscar checkpoint de run_table_query con resultados
+        query_checkpoint = None
+        for cp in checkpoints:
+            if "run_table_query" in cp.tool and cp.status == "ok":
+                query_checkpoint = cp
+                break
         
-        if last_checkpoint.status == "ok":
-            return f"Procesé tu pregunta exitosamente. Se ejecutaron {len(checkpoints)} pasos."
-        else:
-            return f"Hubo un error al procesar tu pregunta. Revisa los logs para más detalles."
+        if not query_checkpoint or not query_checkpoint.output:
+            last_checkpoint = checkpoints[-1]
+            if last_checkpoint.status == "ok":
+                return f"Procesé tu pregunta. Se ejecutaron {len(checkpoints)} pasos."
+            else:
+                return f"Hubo un error al procesar tu pregunta. Revisa los logs para más detalles."
+        
+        # Extraer resultados del output
+        output = query_checkpoint.output
+        columns = output.get("columns", [])
+        rows = output.get("rows", [])
+        
+        if not rows or not columns:
+            return "La consulta se ejecutó pero no retornó resultados."
+        
+        # Formatear respuesta con valores
+        parts = []
+        for i, col in enumerate(columns):
+            if i < len(rows[0]):
+                value = rows[0][i]
+                formatted_value = self._format_value(col, value)
+                # Mapear nombre de columna a texto amigable
+                friendly_name = self._get_friendly_name(col)
+                parts.append(f"**{friendly_name}**: {formatted_value}")
+        
+        if len(parts) == 1:
+            # Respuesta simple para una sola métrica
+            metric_name = columns[0]
+            value = rows[0][0]
+            return self._generate_natural_response(metric_name, value, question)
+        
+        # Múltiples métricas
+        return "Aquí están los resultados:\n" + "\n".join(parts)
+    
+    def _format_value(self, column: str, value) -> str:
+        """Formatea valor según el tipo de métrica."""
+        if value is None:
+            return "N/A"
+        
+        col_lower = column.lower()
+        
+        # Tiempo en horas
+        if "listening_time" in col_lower or "horas" in col_lower:
+            if isinstance(value, (int, float)):
+                hours = value / 3600000 if value > 1000000 else value
+                return f"{hours:,.1f} horas"
+        
+        # Duración promedio en minutos
+        if "duration" in col_lower or "duracion" in col_lower:
+            if isinstance(value, (int, float)):
+                minutes = value / 60000 if value > 1000 else value
+                return f"{minutes:,.1f} minutos"
+        
+        # Números enteros (conteos)
+        if isinstance(value, (int, float)):
+            if float(value).is_integer():
+                return f"{int(value):,}"
+            return f"{value:,.2f}"
+        
+        return str(value)
+    
+    def _get_friendly_name(self, column: str) -> str:
+        """Convierte nombre de columna a texto amigable."""
+        mapping = {
+            "total_plays": "Total de reproducciones",
+            "unique_tracks": "Canciones únicas",
+            "unique_artists": "Artistas únicos",
+            "total_listening_time": "Tiempo total escuchando",
+            "avg_track_duration": "Duración promedio por canción",
+            "top_artist": "Artista más escuchado",
+            "total_orders": "Total de órdenes",
+            "total_revenue": "Ingresos totales",
+        }
+        return mapping.get(column, column.replace("_", " ").title())
+    
+    def _generate_natural_response(self, metric: str, value, question: str) -> str:
+        """Genera respuesta natural para una métrica."""
+        formatted = self._format_value(metric, value)
+        
+        metric_lower = metric.lower()
+        
+        if "total_plays" in metric_lower:
+            return f"Has escuchado **{formatted}** canciones."
+        
+        if "unique_tracks" in metric_lower:
+            return f"Has escuchado **{formatted}** canciones únicas."
+        
+        if "unique_artists" in metric_lower:
+            return f"Has escuchado a **{formatted}** artistas diferentes."
+        
+        if "listening_time" in metric_lower:
+            return f"Has escuchado un total de **{formatted}** de música."
+        
+        if "avg" in metric_lower and "duration" in metric_lower:
+            return f"La duración promedio de las canciones que escuchas es **{formatted}**."
+        
+        if "top_artist" in metric_lower:
+            return f"Tu artista más escuchado es **{formatted}**."
+        
+        # Fallback genérico
+        friendly = self._get_friendly_name(metric)
+        return f"{friendly}: **{formatted}**"
 
 
 __all__ = ["ResponseComposer", "RESPONSE_COMPOSER_PROMPT"]

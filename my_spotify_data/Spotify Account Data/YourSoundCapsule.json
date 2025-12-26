@@ -1,0 +1,374 @@
+{
+  "stats" : [ {
+    "date" : "2025-12-15",
+    "streamCount" : 0,
+    "secondsPlayed" : 0,
+    "topTracks" : [ {
+      "name" : "infinite source",
+      "streamCount" : 7,
+      "secondsPlayed" : 1459
+    }, {
+      "name" : "MOJABI GHOST",
+      "streamCount" : 7,
+      "secondsPlayed" : 1563
+    }, {
+      "name" : "souvenir",
+      "streamCount" : 4,
+      "secondsPlayed" : 964
+    }, {
+      "name" : "ecdysis",
+      "streamCount" : 4,
+      "secondsPlayed" : 833
+    }, {
+      "name" : "locked club",
+      "streamCount" : 4,
+      "secondsPlayed" : 688
+    }, {
+      "name" : "my mind is a mountain",
+      "streamCount" : 4,
+      "secondsPlayed" : 681
+    }, {
+      "name" : "MILES DE ROSAS",
+      "streamCount" : 3,
+      "secondsPlayed" : 754
+    }, {
+      "name" : "LAS NOCHES",
+      "streamCount" : 3,
+      "secondsPlayed" : 678
+    }, {
+      "name" : "PARIS",
+      "streamCount" : 3,
+      "secondsPlayed" : 621
+    }, {
+      "name" : "Y LLORO",
+      "streamCount" : 3,
+      "secondsPlayed" : 535
+    } ],
+    "topArtists" : [ {
+      "name" : "Junior H",
+      "streamCount" : 43,
+      "secondsPlayed" : 8535
+    }, {
+      "name" : "Deftones",
+      "streamCount" : 33,
+      "secondsPlayed" : 6600
+    }, {
+      "name" : "Bad Bunny",
+      "streamCount" : 41,
+      "secondsPlayed" : 8477
+    }, {
+      "name" : "Natanael Cano",
+      "streamCount" : 29,
+      "secondsPlayed" : 4997
+    }, {
+      "name" : "Tainy",
+      "streamCount" : 15,
+      "secondsPlayed" : 2962
+    }, {
+      "name" : "Dua Lipa",
+      "streamCount" : 9,
+      "secondsPlayed" : 1758
+    }, {
+      "name" : "Feid",
+      "streamCount" : 9,
+      "secondsPlayed" : 1583
+    }, {
+      "name" : "Rauw Alejandro",
+      "streamCount" : 7,
+      "secondsPlayed" : 1414
+    }, {
+      "name" : "J Balvin",
+      "streamCount" : 6,
+      "secondsPlayed" : 1395
+    }, {
+      "name" : "Wisin & Yandel",
+      "streamCount" : 5,
+      "secondsPlayed" : 1132
+    } ],
+    "topGenres" : [ ]
+  }, {
+    "date" : "2025-12-08",
+    "streamCount" : 0,
+    "secondsPlayed" : 0,
+    "topTracks" : [ {
+      "name" : "KLOuFRENS",
+      "streamCount" : 7,
+      "secondsPlayed" : 1393
+    }, {
+      "name" : "BOKeTE",
+      "streamCount" : 6,
+      "secondsPlayed" : 1291
+    }, {
+      "name" : "TURiSTA",
+      "streamCount" : 5,
+      "secondsPlayed" : 948
+    }, {
+      "name" : "BAILE INoLVIDABLE",
+      "streamCount" : 4,
+      "secondsPlayed" : 1463
+    }, {
+      "name" : "CAFé CON RON",
+      "streamCount" : 3,
+      "secondsPlayed" : 684
+    }, {
+      "name" : "La Santa",
+      "streamCount" : 3,
+      "secondsPlayed" : 618
+    }, {
+      "name" : "EoO",
+      "streamCount" : 3,
+      "secondsPlayed" : 560
+    }, {
+      "name" : "Safaera",
+      "streamCount" : 3,
+      "secondsPlayed" : 885
+    }, {
+      "name" : "VeLDÁ",
+      "streamCount" : 3,
+      "secondsPlayed" : 705
+    }, {
+      "name" : "Efecto",
+      "streamCount" : 3,
+      "secondsPlayed" : 607
+    } ],
+    "topArtists" : [ {
+      "name" : "Bad Bunny",
+      "streamCount" : 89,
+      "secondsPlayed" : 18781
+    }, {
+      "name" : "Hello Seahorse!",
+      "streamCount" : 13,
+      "secondsPlayed" : 2650
+    }, {
+      "name" : "The Blaze",
+      "streamCount" : 9,
+      "secondsPlayed" : 2072
+    }, {
+      "name" : "Fred again..",
+      "streamCount" : 8,
+      "secondsPlayed" : 1784
+    }, {
+      "name" : "J Balvin",
+      "streamCount" : 6,
+      "secondsPlayed" : 1488
+    }, {
+      "name" : "CA7RIEL & Paco Amoroso",
+      "streamCount" : 5,
+      "secondsPlayed" : 767
+    }, {
+      "name" : "El Bogueto",
+      "streamCount" : 3,
+      "secondsPlayed" : 586
+    }, {
+      "name" : "Plan B",
+      "streamCount" : 3,
+      "secondsPlayed" : 559
+    }, {
+      "name" : "Daddy Yankee",
+      "streamCount" : 4,
+      "secondsPlayed" : 811
+    }, {
+      "name" : "Feid",
+      "streamCount" : 3,
+      "secondsPlayed" : 529
+    } ],
+    "topGenres" : [ ]
+  }, {
+    "date" : "2025-12-01",
+    "streamCount" : 0,
+    "secondsPlayed" : 0,
+    "topTracks" : [ {
+      "name" : "KLOuFRENS",
+      "streamCount" : 16,
+      "secondsPlayed" : 2738
+    }, {
+      "name" : "TURiSTA",
+      "streamCount" : 12,
+      "secondsPlayed" : 2025
+    }, {
+      "name" : "BOKeTE",
+      "streamCount" : 9,
+      "secondsPlayed" : 1941
+    }, {
+      "name" : "EoO",
+      "streamCount" : 5,
+      "secondsPlayed" : 1011
+    }, {
+      "name" : "DtMF",
+      "streamCount" : 5,
+      "secondsPlayed" : 1158
+    }, {
+      "name" : "BAILE INoLVIDABLE",
+      "streamCount" : 4,
+      "secondsPlayed" : 1240
+    }, {
+      "name" : "Moscow Mule",
+      "streamCount" : 3,
+      "secondsPlayed" : 608
+    }, {
+      "name" : "Tití Me Preguntó",
+      "streamCount" : 2,
+      "secondsPlayed" : 486
+    }, {
+      "name" : "Tarot",
+      "streamCount" : 2,
+      "secondsPlayed" : 474
+    }, {
+      "name" : "Después de la Playa",
+      "streamCount" : 2,
+      "secondsPlayed" : 460
+    } ],
+    "topArtists" : [ {
+      "name" : "Bad Bunny",
+      "streamCount" : 87,
+      "secondsPlayed" : 16907
+    }, {
+      "name" : "Selena",
+      "streamCount" : 3,
+      "secondsPlayed" : 564
+    }, {
+      "name" : "The Blaze",
+      "streamCount" : 2,
+      "secondsPlayed" : 426
+    }, {
+      "name" : "Grupo Frontera",
+      "streamCount" : 2,
+      "secondsPlayed" : 387
+    }, {
+      "name" : "Bomba Estéreo",
+      "streamCount" : 2,
+      "secondsPlayed" : 509
+    }, {
+      "name" : "Carín León",
+      "streamCount" : 2,
+      "secondsPlayed" : 330
+    }, {
+      "name" : "JHAYCO",
+      "streamCount" : 2,
+      "secondsPlayed" : 474
+    }, {
+      "name" : "Rauw Alejandro",
+      "streamCount" : 2,
+      "secondsPlayed" : 454
+    }, {
+      "name" : "Los Pleneros de la Cresta",
+      "streamCount" : 2,
+      "secondsPlayed" : 435
+    }, {
+      "name" : "Tony Dize",
+      "streamCount" : 2,
+      "secondsPlayed" : 396
+    } ],
+    "topGenres" : [ ]
+  } ],
+  "highlights" : [ {
+    "date" : "2025-12-21",
+    "highlightType" : "FANS_LIKE_YOU",
+    "fansLikeYouHighlight" : {
+      "entity" : "LAS NOCHES",
+      "country" : "MX",
+      "position" : 20,
+      "previousPosition" : 16,
+      "numberOfListeners" : 2482888
+    }
+  }, {
+    "date" : "2025-12-14",
+    "highlightType" : "FIRST_TO_DISCOVER",
+    "firstToDiscoverHighlight" : {
+      "entity" : "stayinit",
+      "country" : "MX",
+      "position" : 1603
+    }
+  }, {
+    "date" : "2025-12-07",
+    "highlightType" : "MILESTONE",
+    "milestoneHighlight" : {
+      "entity" : "Bad Bunny",
+      "milestoneListeningSeconds" : 16907
+    }
+  }, {
+    "date" : "2025-11-30",
+    "highlightType" : "STREAKS",
+    "streaksHighlight" : {
+      "entity" : "Hielo",
+      "dayStreaks" : 3
+    }
+  }, {
+    "date" : "2025-11-23",
+    "highlightType" : "UNLIKE_COMBINATION",
+    "unlikeCombinationHighlight" : {
+      "firstEntity" : "Paul Oakenfold",
+      "secondEntity" : "Asher D"
+    }
+  }, {
+    "date" : "2025-11-16",
+    "highlightType" : "YOU_STAND_OUT",
+    "youStandOutHighlight" : {
+      "entity" : "Bad Bunny",
+      "country" : "MX",
+      "secondsPlayed" : 8862,
+      "marketAvgSecondsPlayed" : 1791.1453
+    }
+  }, {
+    "date" : "2025-11-09",
+    "highlightType" : "PROPORTION_LISTENING_ENTITY",
+    "proportionListeningHighlight" : {
+      "entity" : "Deftones",
+      "listeningPercentage" : 92.88376587520708
+    }
+  }, {
+    "date" : "2025-11-02",
+    "highlightType" : "ON_REPEAT",
+    "onRepeatHighlight" : {
+      "entity" : "milk of the madonna",
+      "streamCount" : 7
+    }
+  }, {
+    "date" : "2025-10-26",
+    "highlightType" : "MILESTONE",
+    "multiEntityMilestoneHighlight" : {
+      "entities" : [ "Deftones", "Zoé", "Bad Bunny", "Veneno", "Whatever", "Man On The Moon", "Marquee Moon", "Reckoner", "Knife Prty" ],
+      "milestoneListeningSeconds" : 37026
+    }
+  }, {
+    "date" : "2025-10-19",
+    "highlightType" : "STREAKS",
+    "streaksHighlight" : {
+      "entity" : "Deftones",
+      "dayStreaks" : 7
+    }
+  }, {
+    "date" : "2025-10-12",
+    "highlightType" : "PROPORTION_LISTENING_ENTITY",
+    "proportionListeningHighlight" : {
+      "entity" : "Junior H",
+      "listeningPercentage" : 24.161073825503358
+    }
+  }, {
+    "date" : "2025-10-05",
+    "highlightType" : "FANS_LIKE_YOU",
+    "fansLikeYouHighlight" : {
+      "entity" : "Frecuencia",
+      "country" : "MX",
+      "position" : 9,
+      "previousPosition" : 8,
+      "numberOfListeners" : 2998170
+    }
+  }, {
+    "date" : "2025-09-28",
+    "highlightType" : "UNLIKE_COMBINATION",
+    "unlikeCombinationHighlight" : {
+      "firstEntity" : "FLY",
+      "secondEntity" : "My Heart"
+    }
+  }, {
+    "date" : "2025-09-21",
+    "highlightType" : "YOU_STAND_OUT",
+    "youStandOutHighlight" : {
+      "entity" : "Peso Pluma",
+      "country" : "MX",
+      "secondsPlayed" : 9469,
+      "marketAvgSecondsPlayed" : 903.1511
+    }
+  } ]
+}

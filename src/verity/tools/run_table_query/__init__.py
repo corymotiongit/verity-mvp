@@ -23,6 +23,13 @@ import re
 from verity.exceptions import EmptyResultException, InvalidFilterException, TypeMismatchException
 from verity.core.table_store import TABLE_STORE, TableResult
 
+import hashlib
+from datetime import datetime, timedelta
+
+# Cache global simple para resultados de queries (MVP)
+_QUERY_CACHE: dict[str, tuple[datetime, Any]] = {}
+_CACHE_TTL_SECONDS = 120
+
 
 class RunTableQueryTool(BaseTool):
     """
@@ -71,7 +78,7 @@ class RunTableQueryTool(BaseTool):
         filters_spec = input_data.get("filters", [])
         group_by = input_data.get("group_by", [])
         order_by = input_data.get("order_by", [])
-        limit = input_data.get("limit", 1000)
+        limit = input_data.get("limit", 20000)
 
         # Compare-periods (opcional)
         time_column = input_data.get("time_column")
@@ -80,9 +87,32 @@ class RunTableQueryTool(BaseTool):
         compare_period = input_data.get("compare_period")
         
         start_time = time.time()
+
+        # 0. Verificar Cache
+        cache_key_content = json.dumps({
+            "table": table_name,
+            "metrics": metrics,
+            "filters": filters_spec,
+            "group_by": group_by,
+            "limit": limit,
+            "time_column": time_column,
+            "time_grain": time_grain,
+            "baseline_period": baseline_period,
+            "compare_period": compare_period
+        }, sort_keys=True)
+        cache_key = hashlib.sha256(cache_key_content.encode()).hexdigest()
+
+        now = datetime.now()
+        if cache_key in _QUERY_CACHE:
+            expiry, cached_result = _QUERY_CACHE[cache_key]
+            if now < expiry:
+                # Cache Hit
+                execution_time_ms = (time.time() - start_time) * 1000
+                cached_result["execution_time_ms"] = execution_time_ms
+                cached_result["cache_hit"] = True
+                return cached_result
         
-        # Cargar tabla (buscar en uploads/canonical/)
-        # Stub local: en el futuro se conectará a un registry de data sources
+        # Cargar tabla (buscar en uploads/canonical/ o fallback a Supabase)
         canonical_path = Path("uploads/canonical")
         table_file = None
         
@@ -90,11 +120,40 @@ class RunTableQueryTool(BaseTool):
             table_file = file
             break
         
-        if not table_file:
-            raise FileNotFoundError(f"Table '{table_name}' not found in canonical storage")
-        
-        # Cargar con pandas
-        df = pd.read_csv(table_file, encoding="utf-8")
+        if table_file:
+            # Cargar desde CSV local
+            df = pd.read_csv(table_file, encoding="utf-8")
+        else:
+            # Fallback: cargar desde Supabase
+            import os
+            supabase_url = os.getenv("SUPABASE_URL")
+            supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+            
+            if not supabase_url or not supabase_key:
+                raise FileNotFoundError(
+                    f"Table '{table_name}' not found in canonical storage and Supabase not configured"
+                )
+            
+            from supabase import create_client
+            supabase = create_client(supabase_url, supabase_key)
+            
+            # Fetch all rows using pagination (Supabase limits to 1000 per request)
+            all_data = []
+            batch_size = 1000
+            offset = 0
+            while True:
+                response = supabase.table(table_name).select("*").range(offset, offset + batch_size - 1).execute()
+                if not response.data:
+                    break
+                all_data.extend(response.data)
+                if len(response.data) < batch_size:
+                    break
+                offset += batch_size
+            
+            if not all_data:
+                raise FileNotFoundError(f"Table '{table_name}' not found or empty in Supabase")
+            
+            df = pd.DataFrame(all_data)
 
         def _ensure_datetime_column(local_df: "pd.DataFrame", column: str) -> "pd.Series":
             if column not in local_df.columns:
@@ -575,15 +634,24 @@ class RunTableQueryTool(BaseTool):
             )
         )
         
-        return {
+        final_result = {
             "table_id": table_id,
             "columns": result_df.columns.tolist(),
             "rows": result_df.values.tolist(),
             "row_count": len(result_df),
             "rows_count": len(result_df),
             "schema": schema_out,
-            "execution_time_ms": execution_time_ms
+            "execution_time_ms": execution_time_ms,
+            "cache_hit": False
         }
+
+        # Guardar en Cache
+        _QUERY_CACHE[cache_key] = (
+            now + timedelta(seconds=_CACHE_TTL_SECONDS),
+            final_result.copy()
+        )
+        
+        return final_result
 
 
 __all__ = ["RunTableQueryTool"]

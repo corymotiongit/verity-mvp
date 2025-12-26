@@ -1,6 +1,6 @@
 {
-  "version": "1.1",
-  "updated_at": "2025-12-25T00:00:00Z",
+  "version": "1.2",
+  "updated_at": "2025-12-25T21:00:00Z",
   "description": "Data Dictionary para Verity - Definiciones canónicas de tablas y métricas",
   "tables": {
     "orders": {
@@ -30,200 +30,160 @@
           "description": "Monto total de la orden en moneda local"
         }
       }
+    },
+    "listening_history": {
+      "description": "Historial de reproducción de música de Spotify",
+      "grain": "1 row = 1 play event",
+      "primary_key": "play_id",
+      "time_column": "played_at",
+      "columns": {
+        "play_id": {
+          "type": "string",
+          "description": "Identificador único de la reproducción"
+        },
+        "track_name": {
+          "type": "string",
+          "description": "Nombre de la canción reproducida"
+        },
+        "artist_name": {
+          "type": "string",
+          "description": "Nombre del artista"
+        },
+        "played_at": {
+          "type": "timestamp",
+          "description": "Timestamp de finalización de reproducción"
+        },
+        "ms_played": {
+          "type": "integer",
+          "description": "Duración de reproducción en milisegundos"
+        }
+      }
     }
   },
   "metrics": {
-    "total_orders": {
-      "description": "Total de órdenes (todas, sin filtro de status)",
-      "table": "orders",
-      "expression": "COUNT(order_id)",
+    "total_plays": {
+      "description": "Total de reproducciones de música",
+      "table": "listening_history",
+      "expression": "COUNT(play_id)",
       "data_type": "integer",
-      "requires": ["order_id"],
+      "requires": [
+        "play_id"
+      ],
       "filters": [],
       "aliases": [
-        "orders",
-        "num_orders",
-        "order count",
-        "cantidad de ordenes",
-        "cantidad de órdenes",
-        "numero de ordenes",
-        "número de órdenes",
-        "ordenes",
-        "órdenes",
-        "ordenes totales",
-        "órdenes totales",
-        "pedidos",
-        "número de pedidos",
-        "cantidad de pedidos"
+        "plays",
+        "reproducciones",
+        "total reproducciones",
+        "cuantas canciones",
+        "cuántas canciones",
+        "numero de canciones",
+        "número de canciones",
+        "canciones escuchadas",
+        "songs played",
+        "total songs"
       ],
       "format": "number"
     },
-    "delivered_orders": {
-      "description": "Órdenes entregadas",
-      "table": "orders",
-      "expression": "COUNT(order_id)",
+    "unique_tracks": {
+      "description": "Canciones únicas escuchadas",
+      "table": "listening_history",
+      "expression": "COUNT(DISTINCT track_name)",
       "data_type": "integer",
-      "requires": ["order_id", "order_status"],
-      "filters": [
-        {
-          "column": "order_status",
-          "operator": "=",
-          "value": "delivered"
-        }
+      "requires": [
+        "track_name"
       ],
-      "aliases": [
-        "delivered orders",
-        "ordenes entregadas",
-        "órdenes entregadas",
-        "pedidos entregados",
-        "entregadas"
-      ],
-      "format": "number",
-      "business_notes": "Filtra por order_status = 'delivered'"
-    },
-    "cancelled_orders": {
-      "description": "Órdenes canceladas",
-      "table": "orders",
-      "expression": "COUNT(order_id)",
-      "data_type": "integer",
-      "requires": ["order_id", "order_status"],
-      "filters": [
-        {
-          "column": "order_status",
-          "operator": "=",
-          "value": "cancelled"
-        }
-      ],
-      "aliases": [
-        "cancelled orders",
-        "ordenes canceladas",
-        "órdenes canceladas",
-        "pedidos cancelados",
-        "canceladas"
-      ],
-      "format": "number",
-      "business_notes": "Filtra por order_status = 'cancelled'"
-    },
-    "pending_orders": {
-      "description": "Órdenes pendientes",
-      "table": "orders",
-      "expression": "COUNT(order_id)",
-      "data_type": "integer",
-      "requires": ["order_id", "order_status"],
-      "filters": [
-        {
-          "column": "order_status",
-          "operator": "=",
-          "value": "pending"
-        }
-      ],
-      "aliases": [
-        "pending orders",
-        "ordenes pendientes",
-        "órdenes pendientes",
-        "pedidos pendientes",
-        "pendientes"
-      ],
-      "format": "number",
-      "business_notes": "Filtra por order_status = 'pending'"
-    },
-    "total_revenue": {
-      "description": "Ingresos totales de órdenes entregadas",
-      "table": "orders",
-      "expression": "SUM(order_amount)",
-      "data_type": "number",
-      "requires": ["order_amount", "order_status"],
-      "filters": [
-        {
-          "column": "order_status",
-          "operator": "=",
-          "value": "delivered"
-        }
-      ],
-      "aliases": [
-        "revenue",
-        "sales",
-        "ingresos",
-        "ventas",
-        "ingresos totales",
-        "tot_reven",
-        "ingresos entregadas",
-        "ventas entregadas",
-        "ingresos netos",
-        "ingreso neto",
-        "facturacion",
-        "facturación"
-      ],
-      "format": "currency",
-      "business_notes": "Solo se cuentan órdenes con status 'delivered'"
-    },
-    "gross_revenue": {
-      "description": "Ingresos brutos (suma de montos de todas las órdenes, sin filtro de status)",
-      "table": "orders",
-      "expression": "SUM(order_amount)",
-      "data_type": "number",
-      "requires": ["order_amount"],
       "filters": [],
       "aliases": [
-        "gross revenue",
-        "gross sales",
-        "ventas",
-        "ventas brutas",
-        "ingresos brutos",
-        "ingresos sin filtro",
-        "ventas sin filtro"
+        "unique songs",
+        "canciones unicas",
+        "canciones únicas",
+        "diferentes canciones",
+        "tracks",
+        "distinct tracks"
       ],
-      "format": "currency",
-      "business_notes": "Incluye todas las órdenes, sin filtrar por status"
+      "format": "number"
     },
-    "repeat_customers": {
-      "description": "Clientes con más de una orden entregada",
-      "table": "orders",
-      "expression": "COUNT(DISTINCT customer_id) FILTER (WHERE order_count > 1)",
+    "unique_artists": {
+      "description": "Artistas únicos escuchados",
+      "table": "listening_history",
+      "expression": "COUNT(DISTINCT artist_name)",
       "data_type": "integer",
-      "requires": ["customer_id", "order_status"],
-      "filters": [
-        {
-          "column": "order_status",
-          "operator": "=",
-          "value": "delivered"
-        }
+      "requires": [
+        "artist_name"
       ],
+      "filters": [],
       "aliases": [
-        "retention",
-        "returning_customers",
-        "repeat customers",
-        "clientes recurrentes",
-        "clientes repetidos",
-        "clientes que regresan"
+        "unique artists",
+        "artistas unicos",
+        "artistas únicos",
+        "diferentes artistas",
+        "cuantos artistas",
+        "cuántos artistas"
+      ],
+      "format": "number"
+    },
+    "total_listening_time": {
+      "description": "Tiempo total de escucha en horas",
+      "table": "listening_history",
+      "expression": "SUM(ms_played) / 3600000.0",
+      "data_type": "number",
+      "requires": [
+        "ms_played"
+      ],
+      "filters": [],
+      "aliases": [
+        "listening time",
+        "tiempo de escucha",
+        "horas de musica",
+        "horas de música",
+        "tiempo total",
+        "total time",
+        "cuanto tiempo",
+        "cuánto tiempo"
       ],
       "format": "number",
-      "business_notes": "Un cliente se considera recurrente si tiene más de una orden con status 'delivered'"
+      "business_notes": "Convertido a horas (ms / 3600000)"
     },
-    "avg_order_value": {
-      "description": "Valor promedio por orden entregada",
-      "table": "orders",
-      "expression": "AVG(order_amount)",
+    "avg_track_duration": {
+      "description": "Duración promedio de canciones en minutos",
+      "table": "listening_history",
+      "expression": "AVG(ms_played) / 60000.0",
       "data_type": "number",
-      "requires": ["order_amount", "order_status"],
-      "filters": [
-        {
-          "column": "order_status",
-          "operator": "=",
-          "value": "delivered"
-        }
+      "requires": [
+        "ms_played"
       ],
+      "filters": [],
       "aliases": [
-        "aov",
-        "average order value",
-        "average order amount",
-        "ticket promedio",
-        "ticket medio",
-        "importe promedio",
-        "valor promedio",
-        "promedio por orden"
+        "average duration",
+        "duracion promedio",
+        "duración promedio",
+        "promedio de duracion",
+        "promedio de duración",
+        "avg duration"
       ],
-      "format": "currency"
+      "format": "number",
+      "business_notes": "Convertido a minutos (ms / 60000)"
+    },
+    "top_artist": {
+      "description": "Artista más escuchado por tiempo total",
+      "table": "listening_history",
+      "expression": "MODE() WITHIN GROUP (ORDER BY artist_name)",
+      "data_type": "string",
+      "requires": [
+        "artist_name",
+        "ms_played"
+      ],
+      "filters": [],
+      "aliases": [
+        "most played artist",
+        "artista mas escuchado",
+        "artista más escuchado",
+        "top artist",
+        "artista favorito",
+        "favorite artist"
+      ],
+      "format": "string",
+      "business_notes": "Requiere agregación especial por tiempo total"
     }
   },
   "changelog": [
@@ -236,6 +196,11 @@
       "version": "1.1",
       "date": "2025-12-25",
       "change": "Expanded metrics map: added order-status metrics and richer aliases; kept metric-level filters deterministic"
+    },
+    {
+      "version": "1.2",
+      "date": "2025-12-25",
+      "change": "Added listening_history table with 6 music metrics for Spotify data beta testing"
     }
   ]
 }

@@ -97,6 +97,8 @@ class IntentResolver:
                 "count",
                 "cuantos",
                 "cuántos",
+                "cuantas",
+                "cuántas",
                 "cantidad",
                 "ingresos",
                 "ventas",
@@ -108,6 +110,19 @@ class IntentResolver:
                 "recurrentes",
                 "clientes recurrentes",
                 "returning",
+                # Music-related markers
+                "canciones",
+                "escuchado",
+                "escuchadas",
+                "plays",
+                "reproducciones",
+                "artistas",
+                "tracks",
+                "horas",
+                "tiempo",
+                "listening",
+                "musica",
+                "música",
             ]
             query_markers = [
                 "lista",

@@ -1,0 +1,75 @@
+{
+  "topArtists" : {
+    "numUniqueArtists" : 897,
+    "topArtists" : [ {
+      "artistUri" : "spotify:artist:12GqGscKJx3aE4t07u7eVZ"
+    }, {
+      "artistUri" : "spotify:artist:0elWFr7TW8piilVRYJUe4P"
+    }, {
+      "artistUri" : "spotify:artist:7Gi6gjaWy3DxyilpF1a8Is"
+    }, {
+      "artistUri" : "spotify:artist:3Me35AWHCGqW4sZ7bWWJt1"
+    }, {
+      "artistUri" : "spotify:artist:716NhGYqD1jl2wI1Qkgq36"
+    } ],
+    "topArtistMilliseconds" : 406860735,
+    "topArtistFanPercentage" : 7.593742E-4
+  },
+  "topPodcasts" : {
+    "topPodcastsUri" : [ "spotify:show:4TZQuS9VkyzlzlCQmmcpfe" ],
+    "topPodcastMilliseconds" : 13872937,
+    "topPodcastPercentage" : 0.0,
+    "totalPodcastMilliseconds" : 15870592
+  },
+  "topTracks" : {
+    "topTracks" : [ "spotify:track:1uF2sVVCJNWBGSQ2foMWkU", "spotify:track:61OsemtnuPJ5R0LMEkw60S", "spotify:track:2aYZaN5SmkRDLsrrV8GkBQ", "spotify:track:0R6NfOiLzLj4O5VbYSJAjf", "spotify:track:1jIirpaACmgb4nTYfywys4" ],
+    "topTrackPlayCount" : 160,
+    "topTrackFirstPlayedDate" : "2024-01-20",
+    "distinctTracksPlayed" : 1703
+  },
+  "yearlyMetrics" : {
+    "totalMsListened" : 1454774559,
+    "mostListenedDay" : "2024-03-23",
+    "mostListenedDayMinutes" : 1116.5878,
+    "percentGreaterThanWorldwideUsers" : 85.30664
+  },
+  "musicEvolution" : {
+    "eras" : [ {
+      "key" : "0",
+      "peakMonth" : 2,
+      "color" : "red",
+      "genre" : "reggaeton",
+      "mood" : "heatwave",
+      "descriptor" : "beach",
+      "pivotalArtists" : [ "spotify:artist:4q3ewBCX7sLwd24euuV69X", "spotify:artist:37230BxxYs9ksS7OkZw3IU", "spotify:artist:12GqGscKJx3aE4t07u7eVZ" ],
+      "tracks" : [ {
+        "trackName" : "HUMO",
+        "trackUri" : "spotify:track:6j3PRPNWLutE3CutDzH4uI"
+      }, {
+        "trackName" : "BELLAKEO",
+        "trackUri" : "spotify:track:05WVKTdZhlIMX4qqMLuo0f"
+      }, {
+        "trackName" : "PERRO NEGRO",
+        "trackUri" : "spotify:track:7iQXYTyuG13aoeHxGG28Nh"
+      } ]
+    }, {
+      "key" : "1",
+      "peakMonth" : 8,
+      "color" : "green",
+      "genre" : "indie rock",
+      "mood" : "weirdcore",
+      "descriptor" : "permanent wave",
+      "pivotalArtists" : [ "spotify:artist:3WaJSfKnzc65VDgmj2zU8B", "spotify:artist:3XxNRirzbjfLdDli06zMaB", "spotify:artist:3SXwqSqAoBz9WCI9PDQzY6" ],
+      "tracks" : [ {
+        "trackName" : "Toni",
+        "trackUri" : "spotify:track:2x6rYC4cvXQcqnG8rT2zbJ"
+      }, {
+        "trackName" : "NYSMAW",
+        "trackUri" : "spotify:track:1eaStE5pvqU8TyOqNxHwRH"
+      }, {
+        "trackName" : "Renegade Hearts",
+        "trackUri" : "spotify:track:1gX8UtZY7zXc4FP08NWEAV"
+      } ]
+    } ]
+  }
+}

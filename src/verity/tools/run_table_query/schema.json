@@ -11,7 +11,9 @@
       },
       "columns": {
         "type": "array",
-        "items": {"type": "string"},
+        "items": {
+          "type": "string"
+        },
         "description": "Columnas a seleccionar (resueltas desde metrics map del Data Dictionary, NO del LLM)"
       },
       "metrics": {
@@ -19,10 +21,17 @@
         "items": {
           "type": "object",
           "properties": {
-            "name": {"type": "string"},
-            "sql": {"type": "string"}
+            "name": {
+              "type": "string"
+            },
+            "sql": {
+              "type": "string"
+            }
           },
-          "required": ["name", "sql"]
+          "required": [
+            "name",
+            "sql"
+          ]
         },
         "description": "Métricas calculadas (provistas por resolve_semantics)"
       },
@@ -33,27 +42,48 @@
             "items": {
               "type": "object",
               "properties": {
-                "column": {"type": "string"},
-                "operator": {"type": "string"},
+                "column": {
+                  "type": "string"
+                },
+                "operator": {
+                  "type": "string"
+                },
                 "value": {}
               },
-              "required": ["column", "operator", "value"]
+              "required": [
+                "column",
+                "operator",
+                "value"
+              ]
             }
           },
           {
             "type": "object",
             "properties": {
-              "op": {"type": "string", "description": "AND/OR"},
-              "conditions": {"type": "array", "items": {"type": "object"}}
+              "op": {
+                "type": "string",
+                "description": "AND/OR"
+              },
+              "conditions": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
             },
-            "required": ["op", "conditions"]
+            "required": [
+              "op",
+              "conditions"
+            ]
           }
         ],
         "description": "Filtros WHERE"
       },
       "group_by": {
         "type": "array",
-        "items": {"type": "string"},
+        "items": {
+          "type": "string"
+        },
         "description": "Columnas para GROUP BY"
       },
       "order_by": {
@@ -61,22 +91,35 @@
         "items": {
           "type": "object",
           "properties": {
-            "column": {"type": "string"},
-            "direction": {"type": "string", "enum": ["ASC", "DESC"]}
+            "column": {
+              "type": "string"
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "ASC",
+                "DESC"
+              ]
+            }
           },
-          "required": ["column"]
+          "required": [
+            "column"
+          ]
         },
         "description": "Ordenamiento"
       },
       "limit": {
         "type": "integer",
         "minimum": 1,
-        "maximum": 10000,
+        "maximum": 50000,
         "description": "Máximo de filas a retornar",
         "default": 1000
       }
     },
-    "required": ["table", "columns"]
+    "required": [
+      "table",
+      "columns"
+    ]
   },
   "output": {
     "type": "object",
@@ -87,7 +130,9 @@
       },
       "columns": {
         "type": "array",
-        "items": {"type": "string"},
+        "items": {
+          "type": "string"
+        },
         "description": "Nombres de columnas del resultado"
       },
       "rows": {
@@ -112,9 +157,18 @@
       "schema": {
         "type": "object",
         "description": "Schema simple del resultado (columna -> dtype)"
+      },
+      "cache_hit": {
+        "type": "boolean",
+        "description": "Indica si el resultado vino de cache"
       }
     },
-    "required": ["table_id", "columns", "rows", "row_count"]
+    "required": [
+      "table_id",
+      "columns",
+      "rows",
+      "row_count"
+    ]
   },
   "deterministic": true,
   "version": "1.0"

@@ -278,20 +278,21 @@ class VerityPipeline:
             if group_by:
                 order_by = [{"column": group_by[0], "direction": "ASC"}]
             
-            return {
+            result = {
                 "table": tables[0] if tables else "orders",
                 "columns": list(set(all_requires)),
                 "metrics": metrics_input,
                 "filters": filters,
                 "group_by": group_by,
                 "order_by": order_by,
-                "limit": 1000,
+                "limit": 20000,
                 # Campos opcionales para compare-periods (run_table_query los interpreta determinísticamente)
                 "time_column": time_column,
                 "time_grain": time_grain,
                 "baseline_period": baseline_period,
                 "compare_period": compare_period,
             }
+            return result
         
         elif tool_name == "build_chart@2.0":
             if not previous_output:
