@@ -54,9 +54,9 @@ class ResolveSemanticsTool(BaseTool):
         
         Proceso:
         1. Cargar Data Dictionary
-        2. Extraer términos clave de la pregunta
-        3. Hacer fuzzy match contra aliases de métricas
-        4. Si no hay match, retornar unresolved_terms
+        2. PRIMERO: Detectar si es operación de RANKING (genérica)
+        3. Si es ranking, generar plan sin necesidad de match de métrica
+        4. Si no es ranking, hacer fuzzy match contra aliases de métricas
         5. Construir plan de datos estructurado
         """
         from rapidfuzz import fuzz, process
@@ -66,14 +66,24 @@ class ResolveSemanticsTool(BaseTool):
         available_tables = input_data["available_tables"]
         intent = (input_data.get("intent") or "").strip().lower()
 
+        # Cargar Data Dictionary v1 (authoritative)
+        dd = DataDictionary()
+
+        # =====================================================================
+        # PASO 0: Detectar si es operación de RANKING (genérica)
+        # =====================================================================
+        ranking_info = self._detect_ranking_generic(question, available_tables, dd)
+        if ranking_info:
+            return ranking_info
+
+        # =====================================================================
+        # Si no es ranking, continuar con el flujo normal de match de métricas
+        # =====================================================================
         conversation_context = input_data.get("conversation_context") if isinstance(input_data, dict) else None
         if not isinstance(conversation_context, dict):
             conversation_context = {}
         last_metric = conversation_context.get("last_metric") if isinstance(conversation_context.get("last_metric"), str) else None
         last_table = conversation_context.get("last_table") if isinstance(conversation_context.get("last_table"), str) else None
-
-        # Cargar Data Dictionary v1 (authoritative)
-        dd = DataDictionary()
 
         # Reglas estrictas
         threshold = 85  # fijo (>=85)
@@ -277,6 +287,134 @@ class ResolveSemanticsTool(BaseTool):
                 }
             )
         return output
+
+    def _detect_ranking_generic(self, question: str, available_tables: list[str], dd) -> dict[str, Any] | None:
+        """
+        Detecta si la pregunta es una operación de RANKING genérica.
+        
+        Si es ranking, retorna un plan semántico COMPLETO listo para ejecución.
+        No requiere match con métrica del diccionario.
+        
+        Soporta:
+        - "top 5 artistas"
+        - "ranking de canciones"
+        - "los 10 más escuchados"
+        - Cualquier variante sin necesidad de aliases específicos
+        """
+        import re
+        qn = self._normalize_text(question)
+        
+        # =====================================================================
+        # 1. Detectar si es una consulta de ranking
+        # =====================================================================
+        ranking_keywords = [
+            "top", "ranking", "rank", "mejores", "principales",
+            "mas escuchad", "más escuchad", "favorit",
+            "popular", "frecuent", "primeros", "mayor", "mayores"
+        ]
+        is_ranking = any(k in qn for k in ranking_keywords)
+        
+        if not is_ranking:
+            return None
+        
+        # =====================================================================
+        # 2. Detectar límite (top N, N mejores, etc.)
+        # =====================================================================
+        limit = 10  # default
+        limit_patterns = [
+            r"\btop\s*(\d+)\b",
+            r"\b(\d+)\s*(?:mejores|principales|primeros|mas|más)\b",
+            r"\blos?\s*(\d+)\b",
+        ]
+        for pattern in limit_patterns:
+            match = re.search(pattern, qn)
+            if match:
+                limit = min(int(match.group(1)), 50)  # max 50
+                break
+        
+        # =====================================================================
+        # 3. Inferir tabla y columna de agrupación desde el schema
+        # =====================================================================
+        target_table = None
+        group_by_col = None
+        
+        # Mapeo de palabras clave a columnas (genérico, basado en schema)
+        column_keywords = {
+            "artist": ["artista", "artistas", "artist", "artists"],
+            "track": ["cancion", "canciones", "canción", "track", "tracks", "song", "songs"],
+            "customer": ["cliente", "clientes", "customer", "customers"],
+            "product": ["producto", "productos", "product", "products"],
+        }
+        
+        # Primero detectar qué tipo de entidad busca el usuario
+        detected_entity_type = None
+        for key_type, keywords in column_keywords.items():
+            if any(k in qn for k in keywords):
+                detected_entity_type = key_type
+                break
+        
+        if not detected_entity_type:
+            return None
+        
+        # Buscar en las tablas disponibles la columna que corresponda
+        for table_name in available_tables:
+            try:
+                table_def = dd.get_table(table_name)
+                columns = table_def.columns
+                
+                # Buscar columna que contenga el tipo de entidad detectado
+                for col_name in columns.keys():
+                    col_lower = col_name.lower()
+                    
+                    # Match específico: la columna debe contener el key_type
+                    if detected_entity_type in col_lower:
+                        target_table = table_name
+                        group_by_col = col_name
+                        break
+                
+                if group_by_col:
+                    break
+                    
+            except KeyError:
+                continue
+        
+        if not target_table or not group_by_col:
+            return None
+        
+        # =====================================================================
+        # 4. Construir plan semántico completo para ranking
+        # =====================================================================
+        # Usar COUNT como métrica por defecto (genérico)
+        count_col = "play_id" if "play_id" in [c for c in dd.get_table(target_table).columns] else list(dd.get_table(target_table).columns.keys())[0]
+        
+        return {
+            "tables": [target_table],
+            "metrics": [{
+                "name": "count",
+                "alias_matched": "ranking",
+                "definition": f"COUNT({count_col})",
+                "requires": [count_col],
+                "filters": [],
+                "format": "number",
+                "match_score": 100.0,
+                "matched_phrase": "ranking",
+                "base_match_score": 100.0,
+                "context_boost": 0.0,
+                "context_boost_reasons": [],
+            }],
+            "filters": [],
+            "group_by": [group_by_col],
+            "order_by": [{"column": "count", "direction": "DESC"}],
+            "limit": limit,
+            "confidence": 0.95,
+            "unresolved_terms": [],
+            "data_dictionary_version": dd.version,
+            "operation": "rank",  # Marker for ranking operation
+        }
+
+    def _detect_ranking(self, question: str) -> dict[str, Any] | None:
+        """DEPRECATED: Use _detect_ranking_generic instead."""
+        return None
     
     def _normalize_text(self, text: str) -> str:
         return (

@@ -232,7 +232,8 @@ export const queryV2Api = {
   query: (question: string, context?: Record<string, any>): Promise<QueryV2Response> => {
     const payload: QueryV2Request = {
       question,
-      // Keep the backend default unless we have a reason to override.
+      // Include listening_history table by default for Spotify data queries
+      available_tables: ['orders', 'listening_history'],
       context: context ?? null,
     };
 

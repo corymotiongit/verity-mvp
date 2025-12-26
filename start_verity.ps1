@@ -1,4 +1,5 @@
 $env:LEGACY_COMPAT_ENABLED = 'false'
+$env:AUTH_OTP_INSECURE_DEV_BYPASS = 'true'
 $env:SUPABASE_URL = 'https://iruixiqspjcxsmucyylt.supabase.co'
 $env:SUPABASE_SERVICE_KEY = 'REDACTED_SUPABASE_KEY'
 $env:GEMINI_API_KEY = 'REDACTED_API_KEY'

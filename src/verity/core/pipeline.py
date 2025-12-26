@@ -273,10 +273,13 @@ class VerityPipeline:
                 for m in metrics_data
             ]
 
-            # Orden temporal por defecto si hay group_by y no se especificó otro
-            order_by = []
-            if group_by:
+            # Usar order_by del semantic output si existe, sino default temporal
+            order_by = previous_output.get("order_by", [])
+            if not order_by and group_by:
                 order_by = [{"column": group_by[0], "direction": "ASC"}]
+            
+            # Usar limit del semantic output si existe (para rankings)
+            limit = previous_output.get("limit", 20000)
             
             result = {
                 "table": tables[0] if tables else "orders",
@@ -285,7 +288,7 @@ class VerityPipeline:
                 "filters": filters,
                 "group_by": group_by,
                 "order_by": order_by,
-                "limit": 20000,
+                "limit": limit,
                 # Campos opcionales para compare-periods (run_table_query los interpreta determinísticamente)
                 "time_column": time_column,
                 "time_grain": time_grain,
