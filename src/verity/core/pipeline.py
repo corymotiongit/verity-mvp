@@ -29,7 +29,7 @@ from verity.core.tool_executor import ToolExecutor
 from verity.core.checkpoint_logger import CheckpointLogger, Checkpoint, CheckpointStorage
 from verity.core.response_composer import ResponseComposer
 from verity.exceptions import VerityException
-from verity.observability import get_metrics_store
+from verity.observability.metrics import get_metrics_store
 
 
 @dataclass
@@ -136,7 +136,7 @@ class VerityPipeline:
                     status="ok",
                     execution_time_ms=execution_time_ms
                 )
-                
+
                 # Record metrics
                 get_metrics_store().record_tool_latency(tool_name, execution_time_ms)
                 

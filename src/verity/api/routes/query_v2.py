@@ -146,15 +146,13 @@ def _format_disambiguation_prompt(candidates: list[dict[str, Any]]) -> str:
 
 
 def _maybe_apply_disambiguation_answer(*, conversation_id: str, question: str) -> str:
-    """Apply disambiguation answer if pending candidates exist."""
     ctx = _SEMANTICS_CONTEXT.get(conversation_id)
     pending = ctx.pending_candidates or []
     qn = (question or "").strip()
-    
     if not pending:
         return question
 
-    # Option 1: number selection (1-5)
+    # Opción 1: número
     if qn.isdigit():
         idx = int(qn)
         if 1 <= idx <= min(5, len(pending)):
@@ -164,7 +162,7 @@ def _maybe_apply_disambiguation_answer(*, conversation_id: str, question: str) -
                 _SEMANTICS_CONTEXT.clear_pending_candidates(conversation_id=conversation_id)
                 return metric.strip()
 
-    # Option 2: canonical name match
+    # Opción 2: nombre canónico
     for c in pending[:5]:
         metric = c.get("metric")
         if isinstance(metric, str) and metric.strip() and metric.strip().lower() == qn.lower():

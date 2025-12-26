@@ -50,11 +50,11 @@ def _clear_settings_cache(monkeypatch):
     # Disable rate limiting for these tests to isolate OTP error handling
     monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
     get_settings.cache_clear()
-    
+
     # Clear rate limit store
     from verity.main import _rate_limit_store
+
     _rate_limit_store.clear()
-    
     yield
     get_settings.cache_clear()
 
