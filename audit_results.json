@@ -1,0 +1,62 @@
+[
+  {
+    "question": "Cuantos registros hay?",
+    "status_code": 400,
+    "intent": null,
+    "confidence": null,
+    "response": "",
+    "checkpoints": 0,
+    "cache_hit": false,
+    "human_intervention": false
+  },
+  {
+    "question": "Cuantas tiendas unicas hay?",
+    "status_code": 200,
+    "intent": "aggregate",
+    "confidence": 0.2,
+    "response": "¿A cuál métrica te refieres? Responde con el número (1-5) o el nombre exacto:\n1) total_plays (alias: cuantas canciones, score: 90.0)\n2) unique_tracks (alias: canciones unicas, score: 90.0)",
+    "checkpoints": 1,
+    "cache_hit": false,
+    "human_intervention": false
+  },
+  {
+    "question": "Top 5 tiendas por ventas",
+    "status_code": 400,
+    "intent": null,
+    "confidence": null,
+    "response": "",
+    "checkpoints": 0,
+    "cache_hit": false,
+    "human_intervention": false
+  },
+  {
+    "question": "Top 10 departamentos por ventas",
+    "status_code": 400,
+    "intent": null,
+    "confidence": null,
+    "response": "",
+    "checkpoints": 0,
+    "cache_hit": false,
+    "human_intervention": false
+  },
+  {
+    "question": "Top 5 tiendas en semanas con holiday",
+    "status_code": 200,
+    "intent": "unknown",
+    "confidence": 0.2,
+    "response": "No pude procesar tu pregunta: 'Top 5 tiendas en semanas con holiday'. Intenta reformularla.",
+    "checkpoints": 0,
+    "cache_hit": false,
+    "human_intervention": false
+  },
+  {
+    "question": "Top 5 tiendas por ventas",
+    "status_code": 400,
+    "intent": null,
+    "confidence": null,
+    "response": "",
+    "checkpoints": 0,
+    "cache_hit": false,
+    "human_intervention": false
+  }
+]
