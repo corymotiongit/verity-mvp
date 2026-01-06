@@ -149,8 +149,19 @@ class RunBasicQueryTool(BaseTool):
             return "COUNT", None, None
         
         # DISTINCT (con columna)
+        # Try pattern 1: "cuantas COLUMN unicas" or "how many unique COLUMN"
         distinct_match = re.search(
-            r"(unique|distinct|diferentes|distintos)\s+(?:values?\s+(?:in|of|for)\s+)?([a-z0-9_]+)",
+            r"(cuantos|cuántos|cuantas|cuántas|how\s+many)\s+([a-z0-9_]+)\s+(unique|distinct|diferentes|distintos|distintas|unicas|únicas|unicos|únicos)",
+            question,
+            re.IGNORECASE,
+        )
+        if distinct_match:
+            column = distinct_match.group(2)
+            return "DISTINCT", column, None
+        
+        # Try pattern 2: "unique COLUMN" or "distinct COLUMN"
+        distinct_match = re.search(
+            r"(unique|distinct|diferentes|distintos|distintas|unicas|únicas|unicos|únicos)\s+(?:values?\s+(?:in|of|for)\s+)?([a-z0-9_]+)",
             question,
             re.IGNORECASE,
         )
@@ -171,7 +182,7 @@ class RunBasicQueryTool(BaseTool):
         
         # SUM (con columna)
         sum_match = re.search(
-            r"(sum|suma|total)\s+(?:of\s+)?([a-z0-9_]+)",
+            r"(sum|suma|total)\s+(?:of\s+|de\s+)?([a-z0-9_]+)",
             question,
             re.IGNORECASE,
         )
@@ -181,7 +192,7 @@ class RunBasicQueryTool(BaseTool):
         
         # AVG (con columna)
         avg_match = re.search(
-            r"(average|avg|promedio)\s+(?:of\s+)?([a-z0-9_]+)",
+            r"(average|avg|promedio)\s+(?:of\s+|de\s+)?([a-z0-9_]+)",
             question,
             re.IGNORECASE,
         )
@@ -191,7 +202,7 @@ class RunBasicQueryTool(BaseTool):
         
         # MIN (con columna)
         min_match = re.search(
-            r"(min|minimum|menor|mínimo)\s+(?:of\s+)?([a-z0-9_]+)",
+            r"(min|minimum|menor|mínimo)\s+(?:of\s+|de\s+)?([a-z0-9_]+)",
             question,
             re.IGNORECASE,
         )
@@ -201,7 +212,7 @@ class RunBasicQueryTool(BaseTool):
         
         # MAX (con columna)
         max_match = re.search(
-            r"(max|maximum|mayor|máximo)\s+(?:of\s+)?([a-z0-9_]+)",
+            r"(max|maximum|mayor|máximo)\s+(?:of\s+|de\s+)?([a-z0-9_]+)",
             question,
             re.IGNORECASE,
         )
@@ -227,12 +238,39 @@ class RunBasicQueryTool(BaseTool):
         # Normalizar nombres de columnas para matching case-insensitive
         column_mapping = {col.lower(): col for col in df.columns}
         
-        # Helper para resolver columna case-insensitive
+        # Helper para resolver columna case-insensitive con substring fallback
         def resolve_column(col_name: str | None) -> str | None:
             if not col_name:
                 return None
             col_lower = col_name.lower()
-            return column_mapping.get(col_lower, None)
+            
+            # Exact match first
+            if col_lower in column_mapping:
+                return column_mapping[col_lower]
+            
+            # Substring match (fuzzy): buscar columna que contenga el token
+            for csv_col_lower, csv_col in column_mapping.items():
+                if col_lower in csv_col_lower or csv_col_lower in col_lower:
+                    return csv_col
+            
+            # Translation fallback: ventas → sales, tienda → store
+            translations = {
+                "ventas": "sales",
+                "tienda": "store",
+                "tiendas": "store",
+                "fecha": "date",
+                "precio": "price",
+                "temperatura": "temperature",
+            }
+            
+            # Si token es traducible, buscar por traducción
+            translated = translations.get(col_lower)
+            if translated:
+                for csv_col_lower, csv_col in column_mapping.items():
+                    if translated in csv_col_lower:
+                        return csv_col
+            
+            return None
         
         if operation == "COUNT":
             count = len(df)
