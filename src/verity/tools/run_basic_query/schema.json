@@ -1,0 +1,121 @@
+{
+  "name": "run_basic_query",
+  "version": "1.0",
+  "description": "Ejecuta operaciones básicas sobre tablas sin requerir Data Dictionary ni DIA schema. Soporte: COUNT, DISTINCT, TOP N, SUM, AVG, MIN, MAX.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "Pregunta del usuario con operación básica (ej: 'count rows', 'distinct Store', 'top 10 by Sales')"
+      },
+      "table_name": {
+        "type": "string",
+        "description": "Nombre de la tabla/CSV a consultar (sin extensión .csv)"
+      }
+    },
+    "required": ["question", "table_name"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "data": {
+        "type": "array",
+        "description": "Resultado de la operación",
+        "items": {
+          "type": "object"
+        }
+      },
+      "operation": {
+        "type": "string",
+        "description": "Operación detectada (COUNT, DISTINCT, TOP_N, SUM, AVG, MIN, MAX)"
+      },
+      "operation_detail": {
+        "type": "string",
+        "description": "Descripción de la operación ejecutada (ej: 'COUNT(*) = 500')"
+      },
+      "table_name": {
+        "type": "string",
+        "description": "Tabla consultada"
+      },
+      "confidence": {
+        "type": "number",
+        "description": "Confidence bajo (0.6-0.7) para señalar que es fallback"
+      },
+      "is_fallback": {
+        "type": "boolean",
+        "description": "Siempre true (marca que es operación fallback)"
+      },
+      "data_source": {
+        "type": "string",
+        "description": "Siempre 'basic_query_fallback'"
+      }
+    },
+    "required": ["data", "operation", "table_name", "confidence", "is_fallback", "data_source"]
+  },
+  "examples": [
+    {
+      "input": {
+        "question": "count rows",
+        "table_name": "walmart"
+      },
+      "output": {
+        "data": [{"count": 6435}],
+        "operation": "COUNT",
+        "operation_detail": "COUNT(*) = 6435",
+        "table_name": "walmart",
+        "confidence": 0.7,
+        "is_fallback": true,
+        "data_source": "basic_query_fallback"
+      }
+    },
+    {
+      "input": {
+        "question": "distinct Store",
+        "table_name": "walmart"
+      },
+      "output": {
+        "data": [{"value": 1}, {"value": 2}, {"value": 3}],
+        "operation": "DISTINCT",
+        "operation_detail": "DISTINCT Store (45 values)",
+        "table_name": "walmart",
+        "confidence": 0.6,
+        "is_fallback": true,
+        "data_source": "basic_query_fallback"
+      }
+    },
+    {
+      "input": {
+        "question": "top 10 by Weekly_Sales",
+        "table_name": "walmart"
+      },
+      "output": {
+        "data": [
+          {"Store": 1, "Weekly_Sales": 500000, "Date": "2012-01-01"},
+          {"Store": 2, "Weekly_Sales": 450000, "Date": "2012-01-08"}
+        ],
+        "operation": "TOP_N",
+        "operation_detail": "TOP 10 ORDER BY Weekly_Sales DESC",
+        "table_name": "walmart",
+        "confidence": 0.6,
+        "is_fallback": true,
+        "data_source": "basic_query_fallback"
+      }
+    },
+    {
+      "input": {
+        "question": "sum Weekly_Sales",
+        "table_name": "walmart"
+      },
+      "output": {
+        "data": [{"sum": 50000000.0}],
+        "operation": "SUM",
+        "operation_detail": "SUM(Weekly_Sales) = 50000000.0",
+        "table_name": "walmart",
+        "confidence": 0.6,
+        "is_fallback": true,
+        "data_source": "basic_query_fallback"
+      }
+    }
+  ]
+}

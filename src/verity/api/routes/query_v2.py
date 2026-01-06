@@ -11,6 +11,8 @@ Endpoints que usan el nuevo pipeline:
 NO usa agentes legacy.
 """
 
+import logging
+from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Any
@@ -23,11 +25,13 @@ from verity.core.checkpoint_logger import CheckpointStorage, Checkpoint
 from verity.tools.resolve_semantics import ResolveSemanticsTool
 from verity.tools.run_table_query import RunTableQueryTool
 from verity.tools.build_chart import BuildChartTool
+from verity.tools.run_basic_query import RunBasicQueryTool
 from verity.exceptions import AmbiguousMetricException, UnresolvedMetricException, VerityException
 from verity.core.semantics_context import SemanticsContextStore
 
 
 router = APIRouter(prefix="/api/v2", tags=["v2-query"])
+logger = logging.getLogger(__name__)
 
 
 class QueryRequest(BaseModel):
@@ -285,9 +289,76 @@ async def execute_query(request: QueryRequest) -> QueryResponse:
             checkpoints=checkpoints,
         )
 
-    except UnresolvedMetricException:
-        # Mantener contrato actual (error tipado) para unresolved.
-        raise
+    except UnresolvedMetricException as e:
+        # PR4: Intentar fallback a operaciones básicas sin Data Dictionary
+        logger.warning(f"[PR4] resolve_semantics failed, trying basic_query fallback")
+        
+        try:
+            from verity.tools.run_basic_query import RunBasicQueryTool
+            
+            basic_tool = RunBasicQueryTool()
+            
+            # Necesitamos table_name: usar primera tabla disponible
+            table_name = None
+            if request.available_tables and len(request.available_tables) > 0:
+                table_name = request.available_tables[0]
+            
+            if not table_name:
+                # No hay tabla disponible, re-raise
+                logger.warning("[PR4] No available_tables for fallback")
+                raise
+            
+            basic_result = await basic_tool.execute({
+                "question": request.question,
+                "table_name": table_name,
+            })
+            
+            # Formato del resultado básico a respuesta
+            operation_detail = basic_result.get("operation_detail", "")
+            data = basic_result.get("data", [])
+            
+            # Respuesta simple
+            response_text = f"**Operación básica**: {operation_detail}\n\n"
+            if len(data) == 1 and len(data[0]) == 1:
+                # Single value (COUNT, SUM, AVG, etc.)
+                key = list(data[0].keys())[0]
+                value = data[0][key]
+                response_text += f"**Resultado**: {value}"
+            else:
+                # Multiple rows (DISTINCT, TOP N)
+                response_text += f"**Primeros resultados**:\n"
+                for i, row in enumerate(data[:10], 1):
+                    response_text += f"{i}. {row}\n"
+            
+            # Checkpoint manual para fallback
+            from verity.core.checkpoint_logger import Checkpoint
+            fallback_checkpoint = Checkpoint(
+                checkpoint_id=str(uuid4()),
+                conversation_id=request.conversation_id or str(uuid4()),
+                tool="basic_query_fallback",
+                status="ok",
+                input={"question": request.question, "table_name": table_name},
+                output=basic_result,
+                timestamp=datetime.utcnow().isoformat(),
+                execution_time_ms=0.0,
+            )
+            
+            from dataclasses import asdict
+            
+            return QueryResponse(
+                conversation_id=request.conversation_id or str(uuid4()),
+                response=response_text,
+                intent="query_data",
+                confidence=basic_result.get("confidence", 0.6),
+                checkpoints=[asdict(fallback_checkpoint)],
+            )
+            
+        except Exception as fallback_error:
+            # Fallback también falló, retornar error original
+            logger.error(f"[PR4] Fallback failed: {fallback_error}")
+            # Re-raise UnresolvedMetricException original
+            raise e from fallback_error
+
     
     except VerityException:
         raise
