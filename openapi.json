@@ -6501,7 +6501,7 @@
               }
             ],
             "title": "Schema",
-            "description": "Inferred schema from DIA (PR2 will implement)"
+            "description": "Inferred schema from DIA"
           },
           "warnings": {
             "items": {

@@ -22,6 +22,7 @@ from verity.api.routes.upload_v2_schemas import (
     UploadMetadata,
     TableInfo,
 )
+from verity.tools.document_interpreter import infer_schema_from_csv
 
 router = APIRouter(prefix="/api/v2", tags=["upload-v2"])
 
@@ -147,20 +148,60 @@ async def upload_file(
     )
     
     # Table info (friendly name defaults to filename stem)
+    friendly_name = table_name or Path(file.filename).stem
     table_info = TableInfo(
         table_id=table_id,
-        table_name=table_name or Path(file.filename).stem,
+        table_name=friendly_name,
         file_type=file_type,
         row_count=row_count,
     )
+    
+    # DIA: Infer schema (CSV only for now)
+    inferred_schema = None
+    inference_status = "not_supported"
+    inference_message = "Schema inference not supported for this file type"
+    
+    if file_type == "csv":
+        try:
+            logger.info(f"[upload_v2] Running DIA schema inference for {file.filename}")
+            dia_result = infer_schema_from_csv(
+                file_path=file_path,
+                table_name=friendly_name,
+                sample_rows=10,
+            )
+            
+            inferred_schema = {
+                "table_name": dia_result.table_name,
+                "columns": [col.model_dump() for col in dia_result.columns],
+                "row_count": dia_result.row_count,
+                "confidence_avg": dia_result.confidence_avg,
+                "inference_method": dia_result.inference_method,
+            }
+            
+            inference_status = "completed"
+            inference_message = (
+                f"Schema inferred: {len(dia_result.columns)} columns, "
+                f"avg confidence {dia_result.confidence_avg:.2%}"
+            )
+            
+            logger.info(
+                f"[upload_v2] DIA success: {len(dia_result.columns)} columns, "
+                f"method={dia_result.inference_method}, confidence={dia_result.confidence_avg:.2f}"
+            )
+            
+        except Exception as e:
+            logger.error(f"[upload_v2] DIA failed: {e}")
+            inference_status = "failed"
+            inference_message = f"Schema inference failed: {str(e)}"
     
     # Return response
     return UploadResponse(
         table_id=table_id,
         table_info=table_info,
         metadata=metadata,
-        inference_status="pending",  # PR2 will implement DIA
-        message=f"File uploaded successfully. Schema inference pending (PR2).",
+        inferred_schema=inferred_schema,
+        inference_status=inference_status,
+        message=inference_message,
     )
 
 

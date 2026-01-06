@@ -77,7 +77,15 @@ def test_upload_csv_success(auth_headers, sample_csv_content):
     assert "table_id" in result
     assert "table_info" in result
     assert "metadata" in result
-    assert result["inference_status"] == "pending"
+    assert result["inference_status"] == "completed"  # DIA integrated in PR2
+    
+    # Validate DIA schema inference (aliased as "schema" in API response)
+    assert "schema" in result
+    schema = result["schema"]
+    assert schema is not None
+    assert "columns" in schema
+    assert len(schema["columns"]) > 0  # Should have inferred columns
+    assert "confidence_avg" in schema
     
     # Validate table_info
     table_info = result["table_info"]
@@ -251,7 +259,8 @@ def test_upload_integration_flow(auth_headers, sample_csv_content):
     assert result["table_info"]["table_name"] == "Walmart Test"
     assert result["table_info"]["row_count"] == 5
     assert result["metadata"]["size_bytes"] > 0
-    assert result["inference_status"] == "pending"
+    assert result["inference_status"] == "completed"  # DIA integrated in PR2
+    assert result["schema"] is not None  # Schema should be inferred (aliased from inferred_schema)
     
     # Step 3: Get metadata
     get_resp = client.get(f"/api/v2/upload/{table_id}", headers=auth_headers)

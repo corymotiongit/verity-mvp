@@ -8,7 +8,7 @@ Part of PR1: Upload + Storage + Metadata.
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TableInfo(BaseModel):
@@ -38,6 +38,8 @@ class UploadMetadata(BaseModel):
 class UploadResponse(BaseModel):
     """Response from file upload endpoint."""
     
+    model_config = ConfigDict(populate_by_name=True)
+    
     table_id: str = Field(..., description="Unique table identifier")
     table_info: TableInfo = Field(..., description="Basic table information")
     metadata: UploadMetadata = Field(..., description="Detailed file metadata")
@@ -49,8 +51,9 @@ class UploadResponse(BaseModel):
     )
     inferred_schema: dict | None = Field(
         default=None,
-        description="Inferred schema from DIA (PR2 will implement)",
+        description="Inferred schema from DIA",
         alias="schema",
+        serialization_alias="schema",
     )
     
     # Warnings/errors
