@@ -75,6 +75,69 @@ _SEMANTICS_CONTEXT = SemanticsContextStore(ttl_seconds=30 * 60)
 _PIPELINE: VerityPipeline | None = None
 
 
+# Helper function for basic_query fallback (DRY)
+async def _execute_basic_query_fallback(
+    request: QueryRequest,
+    exception_type: str,
+) -> QueryResponse:
+    """
+    Execute basic_query fallback when semantic resolution fails.
+    
+    Shared logic for UnresolvedMetricException, AmbiguousMetricException, NoTableMatchException.
+    """
+    logger.warning(f"[PR4] {exception_type}, trying basic_query fallback")
+    
+    from verity.tools.run_basic_query import RunBasicQueryTool
+    
+    basic_tool = RunBasicQueryTool()
+    
+    # Usar primera tabla disponible
+    table_name = None
+    if request.available_tables and len(request.available_tables) > 0:
+        table_name = request.available_tables[0]
+    
+    if not table_name:
+        logger.warning(f"[PR4] No available_tables for {exception_type} fallback")
+        raise
+    
+    # Ejecutar run_basic_query
+    result = await basic_tool.execute(
+        input_data={
+            "question": request.question,
+            "table_name": table_name,
+        }
+    )
+    
+    # Formatear respuesta
+    if "operation_detail" in result and result["operation_detail"]:
+        response_text = f"**Operación básica**: {result['operation']}({result.get('table_name', 'table')})\n\n"
+        response_text += f"**Resultado**: {result['operation_detail']}"
+    else:
+        response_text = "No se pudo ejecutar la operación básica."
+    
+    # Crear checkpoint
+    conv_id = request.conversation_id or str(uuid4())
+    
+    import time
+    checkpoint_dict = {
+        "conversation_id": conv_id,
+        "tool": "run_basic_query@1.0",
+        "status": "ok" if "error" not in result else "error",
+        "input": {"question": request.question, "table_name": table_name},
+        "output": result,
+        "timestamp": time.time(),
+        "execution_time_ms": 0.0
+    }
+    
+    return QueryResponse(
+        conversation_id=conv_id,
+        response=response_text,
+        intent="aggregate",
+        confidence=0.7,
+        checkpoints=[checkpoint_dict]
+    )
+
+
 # Inicializar componentes del pipeline
 def get_pipeline(intent_resolver=None) -> VerityPipeline:
     """Factory para crear pipeline configurado.
@@ -272,203 +335,24 @@ async def execute_query(request: QueryRequest) -> QueryResponse:
         )
 
     except AmbiguousMetricException as e:
-        # PR4: Intentar fallback a basic_query (igual que UnresolvedMetricException)
-        logger.warning(f"[PR4] AmbiguousMetricException, trying basic_query fallback")
-        
         try:
-            from verity.tools.run_basic_query import RunBasicQueryTool
-            
-            basic_tool = RunBasicQueryTool()
-            
-            # Usar primera tabla disponible
-            table_name = None
-            if request.available_tables and len(request.available_tables) > 0:
-                table_name = request.available_tables[0]
-            
-            if not table_name:
-                logger.warning("[PR4] No available_tables for AmbiguousMetric fallback")
-                raise
-            
-            # Ejecutar run_basic_query (recibe input_data dict)
-            result = await basic_tool.execute(
-                input_data={
-                    "question": request.question,
-                    "table_name": table_name,
-                }
-            )
-            
-            # Formatear respuesta desde run_basic_query output
-            if "operation_detail" in result and result["operation_detail"]:
-                # Format: "DISTINCT Store (5 values)" → "**Operación básica**: DISTINCT Store (5 values)"
-                response_text = f"**Operación básica**: {result['operation']}({result.get('table_name', 'table')})\n\n"
-                response_text += f"**Resultado**: {result['operation_detail']}"
-            else:
-                response_text = "No se pudo ejecutar la operación básica."
-            
-            # Crear checkpoint (dict simple para evitar import issues)
-            conv_id = request.conversation_id or str(uuid4())
-            
-            import time
-            checkpoint_dict = {
-                "conversation_id": conv_id,
-                "tool": "run_basic_query@1.0",
-                "status": "ok" if "error" not in result else "error",
-                "input": {"question": request.question, "table_name": table_name},
-                "output": result,
-                "timestamp": time.time(),  # Use epoch timestamp to avoid datetime import
-                "execution_time_ms": 0.0
-            }
-            
-            return QueryResponse(
-                conversation_id=conv_id,
-                response=response_text,
-                intent="aggregate",
-                confidence=0.7,  # Fallback confidence
-                checkpoints=[checkpoint_dict]
-            )
-            
+            return await _execute_basic_query_fallback(request, "AmbiguousMetricException")
         except Exception as fallback_error:
-            # Si fallback falla, devolver mensaje de error genérico
             logger.error(f"[PR4] Fallback failed: {fallback_error}")
-            raise e  # Re-raise original AmbiguousMetricException
+            raise e
 
     except UnresolvedMetricException as e:
-        # PR4: Intentar fallback a operaciones básicas sin Data Dictionary
-        logger.warning(f"[PR4] resolve_semantics failed, trying basic_query fallback")
-        
         try:
-            from verity.tools.run_basic_query import RunBasicQueryTool
-            
-            basic_tool = RunBasicQueryTool()
-            
-            # Necesitamos table_name: usar primera tabla disponible
-            table_name = None
-            if request.available_tables and len(request.available_tables) > 0:
-                table_name = request.available_tables[0]
-            
-            if not table_name:
-                # No hay tabla disponible, re-raise
-                logger.warning("[PR4] No available_tables for fallback")
-                raise
-            
-            basic_result = await basic_tool.execute({
-                "question": request.question,
-                "table_name": table_name,
-            })
-            
-            # Formato del resultado básico a respuesta
-            operation_detail = basic_result.get("operation_detail", "")
-            data = basic_result.get("data", [])
-            
-            # Respuesta simple
-            response_text = f"**Operación básica**: {operation_detail}\n\n"
-            if len(data) == 1 and len(data[0]) == 1:
-                # Single value (COUNT, SUM, AVG, etc.)
-                key = list(data[0].keys())[0]
-                value = data[0][key]
-                response_text += f"**Resultado**: {value}"
-            else:
-                # Multiple rows (DISTINCT, TOP N)
-                response_text += f"**Primeros resultados**:\n"
-                for i, row in enumerate(data[:10], 1):
-                    response_text += f"{i}. {row}\n"
-            
-            # Checkpoint manual para fallback
-            from verity.core.checkpoint_logger import Checkpoint
-            fallback_checkpoint = Checkpoint(
-                checkpoint_id=str(uuid4()),
-                conversation_id=request.conversation_id or str(uuid4()),
-                tool="basic_query_fallback",
-                status="ok",
-                input={"question": request.question, "table_name": table_name},
-                output=basic_result,
-                timestamp=datetime.utcnow().isoformat(),
-                execution_time_ms=0.0,
-            )
-            
-            from dataclasses import asdict
-            
-            return QueryResponse(
-                conversation_id=request.conversation_id or str(uuid4()),
-                response=response_text,
-                intent="query_data",
-                confidence=basic_result.get("confidence", 0.6),
-                checkpoints=[asdict(fallback_checkpoint)],
-            )
-            
+            return await _execute_basic_query_fallback(request, "UnresolvedMetricException")
         except Exception as fallback_error:
-            # Fallback también falló, retornar error original
             logger.error(f"[PR4] Fallback failed: {fallback_error}")
-            # Re-raise UnresolvedMetricException original
             raise e from fallback_error
     
     except NoTableMatchException as e:
-        # PR4: Tabla no existe en Data Dictionary → intentar fallback
-        logger.warning(f"[PR4] NoTableMatchException, trying basic_query fallback")
-        
         try:
-            from verity.tools.run_basic_query import RunBasicQueryTool
-            
-            basic_tool = RunBasicQueryTool()
-            
-            # Necesitamos table_name: usar primera tabla disponible
-            table_name = None
-            if request.available_tables and len(request.available_tables) > 0:
-                table_name = request.available_tables[0]
-            
-            if not table_name:
-                logger.warning("[PR4] No available_tables for fallback")
-                raise
-            
-            basic_result = await basic_tool.execute({
-                "question": request.question,
-                "table_name": table_name,
-            })
-            
-            # Formato del resultado básico a respuesta
-            operation_detail = basic_result.get("operation_detail", "")
-            data = basic_result.get("data", [])
-            
-            # Respuesta simple
-            response_text = f"**Operación básica**: {operation_detail}\n\n"
-            if len(data) == 1 and len(data[0]) == 1:
-                # Single value (COUNT, SUM, AVG, etc.)
-                key = list(data[0].keys())[0]
-                value = data[0][key]
-                response_text += f"**Resultado**: {value}"
-            else:
-                # Multiple rows (DISTINCT, TOP N)
-                response_text += f"**Primeros resultados**:\n"
-                for i, row in enumerate(data[:10], 1):
-                    response_text += f"{i}. {row}\n"
-            
-            # Checkpoint manual para fallback
-            from verity.core.checkpoint_logger import Checkpoint
-            fallback_checkpoint = Checkpoint(
-                checkpoint_id=str(uuid4()),
-                conversation_id=request.conversation_id or str(uuid4()),
-                tool="basic_query_fallback",
-                status="ok",
-                input={"question": request.question, "table_name": table_name},
-                output=basic_result,
-                timestamp=datetime.utcnow().isoformat(),
-                execution_time_ms=0.0,
-            )
-            
-            from dataclasses import asdict
-            
-            return QueryResponse(
-                conversation_id=request.conversation_id or str(uuid4()),
-                response=response_text,
-                intent="query_data",
-                confidence=basic_result.get("confidence", 0.6),
-                checkpoints=[asdict(fallback_checkpoint)],
-            )
-            
+            return await _execute_basic_query_fallback(request, "NoTableMatchException")
         except Exception as fallback_error:
-            # Fallback también falló, retornar error original
             logger.error(f"[PR4] Fallback failed: {fallback_error}")
-            # Re-raise NoTableMatchException original
             raise e from fallback_error
 
     
