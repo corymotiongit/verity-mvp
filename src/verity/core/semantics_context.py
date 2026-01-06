@@ -25,6 +25,11 @@ class SemanticsContext:
     # One-turn guided disambiguation
     pending_candidates: list[dict[str, Any]] | None = None
 
+    # DIA Schema (Document Interpreter Agent)
+    # Si existe, tiene prioridad sobre el diccionario estático
+    dia_schema: dict[str, Any] | None = None
+    dia_source_file: str | None = None
+
     # Timestamp for TTL
     updated_at_epoch_s: float = 0.0
 
@@ -78,3 +83,32 @@ class SemanticsContextStore:
         ctx = self.get(conversation_id)
         ctx.pending_candidates = None
         ctx.updated_at_epoch_s = self._now()
+
+    def set_dia_schema(self, *, conversation_id: str, schema: dict[str, Any], source_file: str) -> None:
+        """Guarda schema inferido por DIA. Invalida resoluciones previas."""
+        ctx = self.get(conversation_id)
+        ctx.dia_schema = schema
+        ctx.dia_source_file = source_file
+        # Limpiar contexto previo para evitar mezcla de dominios
+        ctx.last_metric = None
+        ctx.last_table = None
+        ctx.last_alias = None
+        ctx.pending_candidates = None
+        ctx.updated_at_epoch_s = self._now()
+
+    def get_dia_schema(self, conversation_id: str) -> dict[str, Any] | None:
+        """Obtiene schema DIA activo, o None si no existe/expiró."""
+        ctx = self.get(conversation_id)
+        return ctx.dia_schema
+
+    def clear_dia_schema(self, *, conversation_id: str) -> None:
+        """Limpia schema DIA (ej: al subir nuevo documento)."""
+        ctx = self.get(conversation_id)
+        ctx.dia_schema = None
+        ctx.dia_source_file = None
+        ctx.updated_at_epoch_s = self._now()
+
+    def has_active_dia_schema(self, conversation_id: str) -> bool:
+        """Verifica si hay schema DIA activo para esta conversación."""
+        schema = self.get_dia_schema(conversation_id)
+        return schema is not None

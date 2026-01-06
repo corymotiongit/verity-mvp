@@ -22,6 +22,27 @@
         "type": "array",
         "items": {"type": "string"},
         "description": "Tablas disponibles en el contexto actual"
+      },
+      "dia_schema": {
+        "type": "object",
+        "description": "Optional DIA schema for domain scoping (PR3). If present, ignores Data Dictionary and scopes fuzzy matching to this schema only.",
+        "properties": {
+          "table_name": {"type": "string"},
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {"type": "string"},
+                "data_type": {"type": "string"},
+                "role": {"type": "string"},
+                "allowed_ops": {"type": "array", "items": {"type": "string"}},
+                "sample_values": {"type": "array", "items": {"type": "string"}},
+                "confidence": {"type": "number"}
+              }
+            }
+          }
+        }
       }
     },
     "required": ["question", "available_tables"]

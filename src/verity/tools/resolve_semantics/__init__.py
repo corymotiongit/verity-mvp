@@ -53,11 +53,15 @@ class ResolveSemanticsTool(BaseTool):
         Resuelve semántica de la pregunta.
         
         Proceso:
-        1. Cargar Data Dictionary
+        1. Cargar Data Dictionary O usar DIA schema (domain scoping)
         2. PRIMERO: Detectar si es operación de RANKING (genérica)
         3. Si es ranking, generar plan sin necesidad de match de métrica
         4. Si no es ranking, hacer fuzzy match contra aliases de métricas
         5. Construir plan de datos estructurado
+        
+        Args:
+            input_data: Debe incluir 'question', 'available_tables'
+                       Opcional: 'dia_schema' (dict con DIA inference) - si presente, ignora Data Dictionary
         """
         from rapidfuzz import fuzz, process
         from verity.data import DataDictionary
@@ -65,14 +69,18 @@ class ResolveSemanticsTool(BaseTool):
         question = input_data["question"]
         available_tables = input_data["available_tables"]
         intent = (input_data.get("intent") or "").strip().lower()
+        
+        # PR3: Domain scoping - si hay DIA schema, usarlo en lugar de Data Dictionary
+        dia_schema = input_data.get("dia_schema")
+        use_dia_schema = dia_schema is not None
 
-        # Cargar Data Dictionary v1 (authoritative)
-        dd = DataDictionary()
+        # Cargar Data Dictionary v1 (authoritative) - solo si no hay DIA schema
+        dd = None if use_dia_schema else DataDictionary()
 
         # =====================================================================
         # PASO 0: Detectar si es operación de RANKING (genérica)
         # =====================================================================
-        ranking_info = self._detect_ranking_generic(question, available_tables, dd)
+        ranking_info = self._detect_ranking_generic(question, available_tables, dd, dia_schema)
         if ranking_info:
             return ranking_info
 
@@ -89,25 +97,45 @@ class ResolveSemanticsTool(BaseTool):
         threshold = 85  # fijo (>=85)
         ambiguity_margin = 3  # puntos; si está muy cerca, pedir aclaración
 
-        # Construir índice alias -> métricas (un alias puede mapear a múltiples métricas)
+        # PR3: Construir índice alias -> métricas según source (DIA schema o Data Dictionary)
         alias_to_metrics: dict[str, set[str]] = {}
-        for metric_name in dd.list_metrics():
-            metric_def = dd.get_metric(metric_name)
-
-            canonical_variants = {
-                metric_name.lower(),
-                metric_name.lower().replace("_", " "),
-            }
-            for v in canonical_variants:
-                alias_to_metrics.setdefault(v, set()).add(metric_name)
-
-            for alias in metric_def.aliases:
-                variants = {
-                    alias.lower(),
-                    alias.lower().replace("_", " "),
+        
+        if use_dia_schema:
+            # Domain scoping: SOLO columnas del schema DIA activo
+            for col in dia_schema.get("columns", []):
+                col_name = col["name"]
+                col_role = col.get("role", "entity")
+                
+                # Solo indexar columnas que pueden ser métricas o filtros
+                if col_role not in ["metric", "filter", "entity", "time"]:
+                    continue
+                
+                # Agregar nombre de columna y variantes
+                canonical_variants = {
+                    col_name.lower(),
+                    col_name.lower().replace("_", " "),
                 }
-                for v in variants:
+                for v in canonical_variants:
+                    alias_to_metrics.setdefault(v, set()).add(col_name)
+        else:
+            # Data Dictionary legacy (cross-domain)
+            for metric_name in dd.list_metrics():
+                metric_def = dd.get_metric(metric_name)
+
+                canonical_variants = {
+                    metric_name.lower(),
+                    metric_name.lower().replace("_", " "),
+                }
+                for v in canonical_variants:
                     alias_to_metrics.setdefault(v, set()).add(metric_name)
+
+                for alias in metric_def.aliases:
+                    variants = {
+                        alias.lower(),
+                        alias.lower().replace("_", " "),
+                    }
+                    for v in variants:
+                        alias_to_metrics.setdefault(v, set()).add(metric_name)
 
         aliases = list(alias_to_metrics.keys())
 
@@ -197,12 +225,49 @@ class ResolveSemanticsTool(BaseTool):
             raise AmbiguousMetricException(user_input=question, candidates=candidates_close[:5])
 
         metric_name = top["metric"]
-        metric_def = dd.get_metric(metric_name)
-        table_def = dd.get_table(metric_def.table)
+        
+        # PR3: Resolver metric_def desde DIA schema o Data Dictionary
+        if use_dia_schema:
+            # Buscar columna en DIA schema
+            col_def = next((c for c in dia_schema["columns"] if c["name"] == metric_name), None)
+            if not col_def:
+                raise UnresolvedMetricException(user_input=question, suggestions=suggestions)
+            
+            # Construir metric_def simulado desde DIA
+            table_name = dia_schema.get("table_name", "uploaded_table")
+            metric_def_dict = {
+                "name": metric_name,
+                "table": table_name,
+                "definition": f"Column from uploaded dataset: {metric_name}",
+                "aliases": [metric_name],
+                "requires": [],  # DIA no tiene dependencies explícitas (por ahora)
+                "allowed_ops": col_def.get("allowed_ops", []),
+                "data_type": col_def.get("data_type", "string"),
+            }
+            # Crear objeto simple para compatibilidad
+            class SimpleMetricDef:
+                def __init__(self, d):
+                    self.__dict__.update(d)
+            metric_def = SimpleMetricDef(metric_def_dict)
+            
+            # Table def simulado
+            class SimpleTableDef:
+                def __init__(self, name):
+                    self.name = name
+                    self.data_source = "uploaded_file"
+                    self.columns = [c["name"] for c in dia_schema["columns"]]
+            table_def = SimpleTableDef(table_name)
+            
+            # Tabla requerida automáticamente disponible (es el archivo subido)
+            available_tables = [table_name]
+        else:
+            # Data Dictionary legacy
+            metric_def = dd.get_metric(metric_name)
+            table_def = dd.get_table(metric_def.table)
 
-        # Tabla requerida debe estar disponible
-        if metric_def.table not in available_tables:
-            raise NoTableMatchException(table=metric_def.table, available_tables=available_tables)
+            # Tabla requerida debe estar disponible
+            if metric_def.table not in available_tables:
+                raise NoTableMatchException(table=metric_def.table, available_tables=available_tables)
 
         # Confidence real: score base + penalidades simples
         confidence = top["score"] / 100.0
@@ -220,14 +285,19 @@ class ResolveSemanticsTool(BaseTool):
             penalty += min(0.18, 0.06 + (ctx_boost / 100.0))
         confidence = max(0.0, min(1.0, confidence - penalty))
 
+        # PR3: Handle attribute differences between Data Dictionary and DIA schema
+        # Data Dictionary uses 'expression', DIA uses 'definition'
+        definition = getattr(metric_def, "expression", None) or getattr(metric_def, "definition", "")
+
         matched_metrics = [
             {
                 "name": metric_name,
                 "alias_matched": top["matched_alias"],
-                "definition": metric_def.expression,
-                "requires": metric_def.requires,
-                "filters": metric_def.filters,
-                "format": metric_def.format,
+                "definition": definition,
+                "requires": getattr(metric_def, "requires", []),
+                "filters": getattr(metric_def, "filters", []),
+                "format": getattr(metric_def, "format", None),
+                "allowed_ops": getattr(metric_def, "allowed_ops", []),  # PR3: Expose from DIA
                 "match_score": top["score"],
                 "matched_phrase": top["matched_phrase"],
                 "base_match_score": float(top.get("base_score", top["score"])),
@@ -269,7 +339,7 @@ class ResolveSemanticsTool(BaseTool):
             "filters": all_filters,
             "confidence": confidence,
             "unresolved_terms": [],
-            "data_dictionary_version": dd.version,
+            "data_dictionary_version": "dia-inference" if use_dia_schema else dd.version,
         }
 
         # COMPARE_PERIODS semantics: time_column explícita + group_by temporal + baseline vs compare
@@ -288,7 +358,7 @@ class ResolveSemanticsTool(BaseTool):
             )
         return output
 
-    def _detect_ranking_generic(self, question: str, available_tables: list[str], dd) -> dict[str, Any] | None:
+    def _detect_ranking_generic(self, question: str, available_tables: list[str], dd, dia_schema: dict | None = None) -> dict[str, Any] | None:
         """
         Detecta si la pregunta es una operación de RANKING genérica.
         
@@ -300,6 +370,9 @@ class ResolveSemanticsTool(BaseTool):
         - "ranking de canciones"
         - "los 10 más escuchados"
         - Cualquier variante sin necesidad de aliases específicos
+        
+        Args:
+            dia_schema: PR3 - Optional DIA schema for domain scoping
         """
         import re
         qn = self._normalize_text(question)
@@ -365,27 +438,44 @@ class ResolveSemanticsTool(BaseTool):
         if not detected_entity_type:
             return None
         
-        # Buscar en las tablas disponibles la columna que corresponda
-        for table_name in available_tables:
-            try:
-                table_def = dd.get_table(table_name)
-                columns = table_def.columns
+        # PR3: Si hay DIA schema, buscar en sus columnas; si no, en Data Dictionary
+        if dia_schema:
+            # Buscar en columnas del DIA schema
+            for col in dia_schema.get("columns", []):
+                col_name = col["name"]
+                col_lower = col_name.lower()
                 
-                # Buscar columna que contenga el tipo de entidad detectado
-                for col_name in columns.keys():
-                    col_lower = col_name.lower()
-                    
-                    # Match específico: la columna debe contener el key_type
-                    if detected_entity_type in col_lower:
-                        target_table = table_name
-                        group_by_col = col_name
-                        break
-                
-                if group_by_col:
+                if detected_entity_type in col_lower:
+                    target_table = dia_schema.get("table_name", "uploaded_table")
+                    group_by_col = col_name
                     break
+            else:
+                return None  # No match en DIA schema
+        else:
+            # Buscar en las tablas disponibles del Data Dictionary
+            if not dd:
+                return None
+            
+            for table_name in available_tables:
+                try:
+                    table_def = dd.get_table(table_name)
+                    columns = table_def.columns
                     
-            except KeyError:
-                continue
+                    # Buscar columna que contenga el tipo de entidad detectado
+                    for col_name in columns.keys():
+                        col_lower = col_name.lower()
+                    
+                        # Match específico: la columna debe contener el key_type
+                        if detected_entity_type in col_lower:
+                            target_table = table_name
+                            group_by_col = col_name
+                            break
+                    
+                    if group_by_col:
+                        break
+                        
+                except KeyError:
+                    continue
         
         if not target_table or not group_by_col:
             return None
@@ -394,7 +484,14 @@ class ResolveSemanticsTool(BaseTool):
         # 4. Construir plan semántico completo para ranking
         # =====================================================================
         # Usar COUNT como métrica por defecto (genérico)
-        count_col = "play_id" if "play_id" in [c for c in dd.get_table(target_table).columns] else list(dd.get_table(target_table).columns.keys())[0]
+        # PR3: Manejar DIA schema vs Data Dictionary
+        if dia_schema:
+            # En DIA schema, usar primera columna como count_col
+            columns = dia_schema.get("columns", [])
+            count_col = columns[0]["name"] if columns else "id"
+        else:
+            # En Data Dictionary, buscar play_id o primera columna
+            count_col = "play_id" if "play_id" in [c for c in dd.get_table(target_table).columns] else list(dd.get_table(target_table).columns.keys())[0]
         
         return {
             "tables": [target_table],
@@ -419,7 +516,7 @@ class ResolveSemanticsTool(BaseTool):
             "limit_capped": limit_requested is not None and limit_requested > 50,
             "confidence": 0.95,
             "unresolved_terms": [],
-            "data_dictionary_version": dd.version,
+            "data_dictionary_version": "dia-inference" if dia_schema else (dd.version if dd else "unknown"),
             "operation": "rank",  # Marker for ranking operation
         }
 
