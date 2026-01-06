@@ -23,16 +23,18 @@ Modular monolithic backend for multi-organization document management with AI-po
 
 ## Quick Start
 
-### 1. Clone and Setup
+### Backend
+
+#### 1. Clone and Setup
 
 ```bash
 cd verity-mvp
 python -m venv .venv
-.venv\Scripts\activate  # Windows
+.venv\Scripts\activate  # Windows (Linux/Mac: source .venv/bin/activate)
 pip install -e ".[dev]"
 ```
 
-### 2. Configure API Key
+#### 2. Configure API Key
 
 Get your Gemini API key from: https://aistudio.google.com/app/apikey
 
@@ -41,18 +43,66 @@ Create `.env.local`:
 GEMINI_API_KEY=your-api-key-here
 ```
 
-### 3. Setup Supabase Database
+#### 3. Setup Supabase Database
 
 Run the schema in your Supabase project:
 ```bash
 # Copy contents of supabase/schema.sql to Supabase SQL Editor
 ```
 
-### 4. Run Server
+#### 4. Run Server
 
 ```bash
 uvicorn verity.main:app --reload --port 8001
 ```
+
+Or use convenience script:
+```bash
+.\start_verity.ps1  # Windows
+./start_verity.sh   # Linux/Mac
+```
+
+### Frontend
+
+#### 1. Navigate to frontend directory
+
+```bash
+cd frontend
+```
+
+#### 2. Install dependencies
+
+```bash
+npm install
+```
+
+#### 3. Configure environment
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` and set your Gemini API key:
+```env
+VITE_GEMINI_API_KEY=your-actual-api-key-here
+VITE_API_URL=http://localhost:8001
+```
+
+#### 4. Run development server
+
+```bash
+npm run dev
+```
+
+Or use convenience script:
+```bash
+.\start.ps1  # Windows
+./start.sh   # Linux/Mac
+```
+
+Frontend available at: `http://localhost:5173`
+
+**Full setup guide**: See [frontend/README.md](frontend/README.md)
 
 ## Multi-Organization Architecture
 
