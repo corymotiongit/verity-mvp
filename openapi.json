@@ -2792,6 +2792,48 @@
         }
       }
     },
+    "/api/v2/auth/otp/validate": {
+      "post": {
+        "tags": [
+          "v2-auth"
+        ],
+        "summary": "Otp Validate V2",
+        "description": "Validate OTP via n8n, upsert identity in Supabase, and issue JWT.",
+        "operationId": "otp_validate_v2_api_v2_auth_otp_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpValidateV2In"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtpValidateV2Out"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v2/query": {
       "post": {
         "tags": [
@@ -2848,6 +2890,141 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/metrics": {
+      "get": {
+        "tags": [
+          "v2-metrics"
+        ],
+        "summary": "Get Metrics",
+        "description": "Get current metrics summary.\n\nReturns metrics for:\n- Tool latencies (p50, p90, p99, mean, max)\n- Error counts by code\n- OTP attempts within the last hour\n\nExample response:\n```json\n{\n  \"uptime_seconds\": 3600.5,\n  \"collected_at\": \"2025-12-25T19:00:00Z\",\n  \"tools\": {\n    \"resolve_semantics@1.0\": {\n      \"call_count\": 150,\n      \"p50_ms\": 45.2,\n      \"p99_ms\": 120.5,\n      \"errors\": {\"UNRESOLVED_METRIC\": 3}\n    }\n  },\n  \"global_errors\": {\"RATE_LIMITED\": 5},\n  \"otp\": {\n    \"attempts_in_window\": 12,\n    \"unique_wa_ids\": 5,\n    \"success_count\": 10,\n    \"error_counts\": {\"OTP_INVALID\": 2}\n  }\n}\n```",
+        "operationId": "get_metrics_api_v2_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Metrics Api V2 Metrics Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/upload": {
+      "post": {
+        "tags": [
+          "upload-v2"
+        ],
+        "summary": "Upload File",
+        "description": "Upload a file for schema inference and query processing.\n\n**Flow:**\n1. Store file in `uploads/{conversation_id}/{table_id}/`\n2. Generate metadata (row count, file type, etc.)\n3. Return table_id + metadata for next step (DIA inference in PR2)\n\n**Supported formats:**\n- CSV (.csv)\n- Excel (.xlsx, .xls)\n- PDF (.pdf) - future\n- Text (.txt, .md) - future\n\n**Returns:**\n- `table_id`: Unique identifier for this table (hash-based)\n- `metadata`: File info, row count, paths\n- `inference_status`: Always \"pending\" (PR2 will implement DIA)",
+        "operationId": "upload_file_api_v2_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_file_api_v2_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/upload/{table_id}": {
+      "get": {
+        "tags": [
+          "upload-v2"
+        ],
+        "summary": "Get Upload Metadata",
+        "description": "Get metadata for a previously uploaded file.\n\n**Note**: This is a placeholder for PR2 (when we persist metadata in DB/cache).\nFor now, returns 404 if file not found in filesystem.",
+        "operationId": "get_upload_metadata_api_v2_upload__table_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "table_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Id"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -3416,6 +3593,45 @@
           "file"
         ],
         "title": "Body_ingest_document_documents_ingest_post"
+      },
+      "Body_upload_file_api_v2_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "File to upload (CSV, Excel, PDF, etc.)"
+          },
+          "table_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table Name",
+            "description": "Optional friendly name for the table"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id",
+            "description": "Optional conversation scope"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_file_api_v2_upload_post"
       },
       "BulkActionResult": {
         "properties": {
@@ -5268,6 +5484,50 @@
         ],
         "title": "OtpValidateIn"
       },
+      "OtpValidateV2In": {
+        "properties": {
+          "wa_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Wa Id"
+          },
+          "otp": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Otp"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "wa_id",
+          "otp"
+        ],
+        "title": "OtpValidateV2In"
+      },
+      "OtpValidateV2Out": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "expires_in"
+        ],
+        "title": "OtpValidateV2Out"
+      },
       "PaginationMeta": {
         "properties": {
           "total_count": {
@@ -5388,6 +5648,17 @@
           "question": {
             "type": "string",
             "title": "Question"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
           },
           "available_tables": {
             "items": {
@@ -5941,6 +6212,40 @@
         "title": "Source",
         "description": "Unified source contract for all query types.\n\n- Tabular (type=\"data\"): file, canonical_file_id, evidence=DataEvidence\n- DocQA (type=\"doc\"): file, evidence=DocEvidence"
       },
+      "TableInfo": {
+        "properties": {
+          "table_id": {
+            "type": "string",
+            "title": "Table Id",
+            "description": "Unique table identifier (hash-based)"
+          },
+          "table_name": {
+            "type": "string",
+            "title": "Table Name",
+            "description": "Friendly name for the table"
+          },
+          "file_type": {
+            "type": "string",
+            "title": "File Type",
+            "description": "Detected file type (csv, excel, pdf, text, unknown)"
+          },
+          "row_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Row Count",
+            "description": "Number of rows (excludes header for CSV)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table_id",
+          "table_name",
+          "file_type",
+          "row_count"
+        ],
+        "title": "TableInfo",
+        "description": "Basic table information returned after upload."
+      },
       "TagCreate": {
         "properties": {
           "name": {
@@ -6090,6 +6395,137 @@
         "type": "object",
         "title": "TagUpdate",
         "description": "Update an existing tag."
+      },
+      "UploadMetadata": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Original filename"
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name",
+            "description": "Original filename (alias)"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type",
+            "description": "MIME type from upload"
+          },
+          "file_type": {
+            "type": "string",
+            "title": "File Type",
+            "description": "Detected file type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Size Bytes",
+            "description": "File size in bytes"
+          },
+          "row_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Row Count",
+            "description": "Row count (0 if not applicable)"
+          },
+          "storage_path": {
+            "type": "string",
+            "title": "Storage Path",
+            "description": "Relative path in uploads/ directory"
+          },
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id",
+            "description": "Conversation scope for this upload"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Upload timestamp (UTC)"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By",
+            "description": "User ID who uploaded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "original_name",
+          "mime_type",
+          "file_type",
+          "size_bytes",
+          "row_count",
+          "storage_path",
+          "conversation_id",
+          "created_at",
+          "created_by"
+        ],
+        "title": "UploadMetadata",
+        "description": "Detailed metadata about the uploaded file."
+      },
+      "UploadResponse": {
+        "properties": {
+          "table_id": {
+            "type": "string",
+            "title": "Table Id",
+            "description": "Unique table identifier"
+          },
+          "table_info": {
+            "$ref": "#/components/schemas/TableInfo",
+            "description": "Basic table information"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/UploadMetadata",
+            "description": "Detailed file metadata"
+          },
+          "inference_status": {
+            "type": "string",
+            "title": "Inference Status",
+            "description": "Schema inference status (pending, completed, failed)",
+            "default": "pending"
+          },
+          "schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema",
+            "description": "Inferred schema from DIA (PR2 will implement)"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Non-critical warnings (e.g., 'High % of nulls in column X')"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable status message",
+            "default": "File uploaded successfully"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table_id",
+          "table_info",
+          "metadata"
+        ],
+        "title": "UploadResponse",
+        "description": "Response from file upload endpoint."
       },
       "ValidationError": {
         "properties": {

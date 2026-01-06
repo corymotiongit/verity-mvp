@@ -41,6 +41,7 @@ from verity.api.routes.auth_v2 import router as auth_v2_router
 # Import v2 API (new architecture)
 from verity.api.routes.query_v2 import router as query_v2_router
 from verity.api.routes.metrics_v2 import router as metrics_v2_router
+from verity.api.routes.upload_v2 import router as upload_v2_router
 
 # Configure standard logging
 logging.basicConfig(
@@ -321,6 +322,9 @@ app.include_router(query_v2_router)
 
 # v2 metrics (observability)
 app.include_router(metrics_v2_router)
+
+# v2 upload (generic file upload + schema inference)
+app.include_router(upload_v2_router)
 
 
 # =============================================================================
