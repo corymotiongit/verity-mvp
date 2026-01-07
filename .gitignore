@@ -12,3 +12,8 @@ dist/
 
 # Local reference repos (do not commit)
 references/
+
+# Scripts with hardcoded secrets (use .env instead)
+start_verity.ps1
+start_verity.sh
+scripts/run.ps1
